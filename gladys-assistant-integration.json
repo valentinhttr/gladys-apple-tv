@@ -1,0 +1,388 @@
+{
+  "manifest_version": 1,
+  "type": "device",
+  "name": "Apple TV",
+  "description": {
+    "en": "Control your Apple TV: power, remote, playback, volume and applications.",
+    "fr": "Contrôlez votre Apple TV : alimentation, télécommande, lecture, volume et applications."
+  },
+  "version": "1.0.0",
+  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.0.0",
+  "cover_image": "https://raw.githubusercontent.com/valentinhttr/gladys-apple-tv/main/assets/cover.jpg",
+  "gladys_version": ">=4.84.3",
+  "transports": ["local"],
+  "network_discovery": [
+    {
+      "type": "mdns",
+      "service": "_airplay._tcp"
+    }
+  ],
+  "config_schema": [
+    {
+      "key": "how_it_works",
+      "type": "section",
+      "label": {
+        "en": "How it works",
+        "fr": "Fonctionnement"
+      },
+      "description": {
+        "en": "1. Run a scan from the Discovery tab: Gladys captures the AirPlay announcements on your network and this integration checks each candidate with pyatv. 2. Add your Apple TV. 3. Pair it with the two buttons at the bottom of this page. An Apple TV must be paired before any command works.",
+        "fr": "1. Lancez une recherche dans l'onglet Découverte : Gladys capte les annonces AirPlay de votre réseau et l'intégration vérifie chaque candidat avec pyatv. 2. Ajoutez votre Apple TV. 3. Appairez-la avec les deux boutons en bas de cette page. Une Apple TV doit être appairée avant que la moindre commande fonctionne."
+      },
+      "links": [
+        {
+          "url": "https://pyatv.dev/documentation/supported_features/",
+          "label": {
+            "en": "Features supported by pyatv",
+            "fr": "Fonctionnalités prises en charge par pyatv"
+          }
+        }
+      ]
+    },
+    {
+      "key": "scan_timeout",
+      "type": "number",
+      "label": {
+        "en": "Discovery duration (seconds)",
+        "fr": "Durée de la recherche (secondes)"
+      },
+      "description": {
+        "en": "How long Gladys listens for AirPlay announcements. Increase it on a busy or slow network.",
+        "fr": "Durée d'écoute des annonces AirPlay. À augmenter sur un réseau chargé ou lent."
+      },
+      "required": false,
+      "default": 8,
+      "min": 2,
+      "max": 25
+    },
+    {
+      "key": "manual_hosts",
+      "type": "string",
+      "label": {
+        "en": "Manual IPv4 addresses",
+        "fr": "Adresses IPv4 manuelles"
+      },
+      "description": {
+        "en": "Optional, comma separated. Needed only when Gladys and your Apple TV are on different subnets or VLANs, where mDNS announcements do not travel. They are added to the automatic discovery.",
+        "fr": "Facultatif, séparées par des virgules. Utile uniquement si Gladys et votre Apple TV sont sur des sous-réseaux ou VLAN différents, où les annonces mDNS ne circulent pas. Elles s'ajoutent à la découverte automatique."
+      },
+      "placeholder": {
+        "en": "192.168.1.20, 192.168.1.21",
+        "fr": "192.168.1.20, 192.168.1.21"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "poll_frequency",
+      "type": "select",
+      "label": {
+        "en": "Refresh interval",
+        "fr": "Intervalle de rafraîchissement"
+      },
+      "description": {
+        "en": "The Apple TV pushes what it can in real time. This interval reconciles what it does not push, typically the power state on some models.",
+        "fr": "L'Apple TV pousse en temps réel ce qu'elle peut. Cet intervalle réconcilie ce qu'elle ne pousse pas, généralement l'état d'alimentation sur certains modèles."
+      },
+      "required": false,
+      "default": "30000",
+      "options": [
+        {
+          "value": "10000",
+          "label": {
+            "en": "10 seconds",
+            "fr": "10 secondes"
+          }
+        },
+        {
+          "value": "15000",
+          "label": {
+            "en": "15 seconds",
+            "fr": "15 secondes"
+          }
+        },
+        {
+          "value": "30000",
+          "label": {
+            "en": "30 seconds",
+            "fr": "30 secondes"
+          }
+        },
+        {
+          "value": "60000",
+          "label": {
+            "en": "1 minute",
+            "fr": "1 minute"
+          }
+        }
+      ]
+    },
+    {
+      "key": "enable_app_shortcuts",
+      "type": "boolean",
+      "label": {
+        "en": "Application shortcuts",
+        "fr": "Raccourcis d'applications"
+      },
+      "description": {
+        "en": "Add one button per installed application to the device, so scenes can open Netflix or Disney+ directly. Read from the Apple TV after pairing.",
+        "fr": "Ajoute un bouton par application installée sur l'appareil, pour ouvrir Netflix ou Disney+ directement depuis une scène. Lu sur l'Apple TV après l'appairage."
+      },
+      "required": false,
+      "default": true
+    },
+    {
+      "key": "max_app_shortcuts",
+      "type": "number",
+      "label": {
+        "en": "Maximum number of shortcuts",
+        "fr": "Nombre maximum de raccourcis"
+      },
+      "description": {
+        "en": "An Apple TV can have a hundred applications. This bound keeps the device readable.",
+        "fr": "Une Apple TV peut compter une centaine d'applications. Cette limite garde l'appareil lisible."
+      },
+      "required": false,
+      "default": 25,
+      "min": 0,
+      "max": 100
+    }
+  ],
+  "actions": [
+    {
+      "key": "pair_start",
+      "label": {
+        "en": "1. Pair an Apple TV",
+        "fr": "1. Appairer une Apple TV"
+      },
+      "description": {
+        "en": "Type the IP address of your Apple TV (or its name if it is already added). A code appears on your television.",
+        "fr": "Saisissez l'adresse IP de votre Apple TV (ou son nom si elle est déjà ajoutée). Un code s'affiche sur votre téléviseur."
+      },
+      "timeout_seconds": 120,
+      "fields": [
+        {
+          "key": "device",
+          "type": "string",
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          },
+          "description": {
+            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one. For a first pairing, type its IP address: it does not have to exist in Gladys yet.",
+            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une. Pour un premier appairage, saisissez son adresse IP : elle n'a pas besoin d'exister déjà dans Gladys."
+          },
+          "placeholder": {
+            "en": "192.168.1.20",
+            "fr": "192.168.1.20"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "pair_pin",
+      "label": {
+        "en": "2. Enter the code",
+        "fr": "2. Saisir le code"
+      },
+      "description": {
+        "en": "Enter the code displayed on your television. Apple asks for one code per protocol: when a second code appears, CLEAR this field and type the new code in its place, then press the button again.",
+        "fr": "Saisissez le code affiché sur votre téléviseur. Apple demande un code par protocole : lorsqu'un second code apparaît, EFFACEZ ce champ et saisissez le nouveau code à la place, puis relancez le bouton."
+      },
+      "timeout_seconds": 120,
+      "fields": [
+        {
+          "key": "pin",
+          "type": "string",
+          "label": {
+            "en": "Code (clear it before each new code)",
+            "fr": "Code (à effacer avant chaque nouveau code)"
+          },
+          "placeholder": {
+            "en": "1234",
+            "fr": "1234"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "refresh",
+      "label": {
+        "en": "Reconnect and refresh",
+        "fr": "Reconnecter et actualiser"
+      },
+      "description": {
+        "en": "Reopen the session with an Apple TV and read its state again.",
+        "fr": "Rouvre la session avec une Apple TV et relit son état."
+      },
+      "timeout_seconds": 90,
+      "fields": [
+        {
+          "key": "device",
+          "type": "string",
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          },
+          "description": {
+            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
+            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
+          },
+          "placeholder": {
+            "en": "192.168.1.20",
+            "fr": "192.168.1.20"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "list_apps",
+      "label": {
+        "en": "List the installed applications",
+        "fr": "Lister les applications installées"
+      },
+      "description": {
+        "en": "Show the name and the bundle identifier of every installed application.",
+        "fr": "Affiche le nom et l'identifiant de chaque application installée."
+      },
+      "timeout_seconds": 60,
+      "fields": [
+        {
+          "key": "device",
+          "type": "string",
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          },
+          "description": {
+            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
+            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
+          },
+          "placeholder": {
+            "en": "192.168.1.20",
+            "fr": "192.168.1.20"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "launch_app",
+      "label": {
+        "en": "Launch an application",
+        "fr": "Lancer une application"
+      },
+      "timeout_seconds": 60,
+      "fields": [
+        {
+          "key": "device",
+          "type": "string",
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          },
+          "description": {
+            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
+            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
+          },
+          "placeholder": {
+            "en": "192.168.1.20",
+            "fr": "192.168.1.20"
+          },
+          "required": false
+        },
+        {
+          "key": "app_id",
+          "type": "string",
+          "label": {
+            "en": "Bundle identifier",
+            "fr": "Identifiant de l'application"
+          },
+          "placeholder": {
+            "en": "com.netflix.Netflix",
+            "fr": "com.netflix.Netflix"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "play_url",
+      "label": {
+        "en": "Play a URL",
+        "fr": "Lire une URL"
+      },
+      "description": {
+        "en": "Send a video URL or a deep link to the Apple TV over AirPlay.",
+        "fr": "Envoie une URL vidéo ou un lien profond à l'Apple TV via AirPlay."
+      },
+      "timeout_seconds": 60,
+      "fields": [
+        {
+          "key": "device",
+          "type": "string",
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          },
+          "description": {
+            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
+            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
+          },
+          "placeholder": {
+            "en": "192.168.1.20",
+            "fr": "192.168.1.20"
+          },
+          "required": false
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": {
+            "en": "URL",
+            "fr": "URL"
+          },
+          "placeholder": {
+            "en": "https://example.com/video.mp4",
+            "fr": "https://example.com/video.mp4"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "unpair",
+      "label": {
+        "en": "Delete the pairing",
+        "fr": "Supprimer l'appairage"
+      },
+      "description": {
+        "en": "Delete the stored credentials of an Apple TV. Use it when pairing has to be redone, for example after a factory reset.",
+        "fr": "Supprime les identifiants enregistrés d'une Apple TV. À utiliser lorsque l'appairage doit être refait, par exemple après une réinitialisation."
+      },
+      "timeout_seconds": 60,
+      "fields": [
+        {
+          "key": "device",
+          "type": "string",
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          },
+          "description": {
+            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
+            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
+          },
+          "placeholder": {
+            "en": "192.168.1.20",
+            "fr": "192.168.1.20"
+          },
+          "required": false
+        }
+      ]
+    }
+  ]
+}

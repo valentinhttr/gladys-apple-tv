@@ -1,0 +1,13 @@
+node_modules
+coverage
+__pycache__
+*.py[cod]
+.git
+.github
+.env
+.env.*
+data
+*.log
+test
+README.md
+docs

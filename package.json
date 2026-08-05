@@ -1,0 +1,38 @@
+{
+  "name": "gladys-apple-tv",
+  "version": "1.0.0",
+  "private": true,
+  "description": "External Gladys Assistant integration to discover, pair and control Apple TV devices with pyatv.",
+  "homepage": "https://github.com/valentinhttr/gladys-apple-tv#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/valentinhttr/gladys-apple-tv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/valentinhttr/gladys-apple-tv/issues"
+  },
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test test/*.test.js && python3 -m py_compile src/pyatv_bridge.py",
+    "test:coverage": "node --test --experimental-test-coverage test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@gladysassistant/integration-sdk": "0.10.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5"
+  },
+  "license": "Apache-2.0"
+}

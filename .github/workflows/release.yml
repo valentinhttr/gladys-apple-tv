@@ -1,0 +1,101 @@
+# -----------------------------------------------------------------------------
+# Cut a release, entirely from the GitHub UI.
+#
+# Actions -> Release -> "Run workflow" -> pick patch / minor / major.
+#
+# In one run:
+#   1. run the same gates as CI (a broken release helps nobody);
+#   2. compute the next semver from package.json;
+#   3. write it into package.json, package-lock.json AND the manifest
+#      (`version` and the `docker_image` tag, so the store indexer and the
+#      published image stay in lockstep);
+#   4. commit the bump and push the `vX.Y.Z` tag;
+#   5. call build.yml, which publishes the multi-arch image and only then runs
+#      the store admission check (it needs the image to exist).
+# -----------------------------------------------------------------------------
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-type:
+        description: 'Version bump for this release'
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit the bump and push the tag
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm test
+
+      - name: Bump the version and update the manifest
+        id: bump
+        env:
+          RELEASE_TYPE: ${{ inputs.release-type }}
+        run: |
+          set -euo pipefail
+
+          # npm computes the next semver and writes package.json and the lock
+          # file. --no-git-tag-version: the commit and the tag are ours.
+          new_version="$(npm version "$RELEASE_TYPE" --no-git-tag-version | tail -n1)"
+          new_version="${new_version#v}"
+
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${new_version}"
+
+          tmp="$(mktemp)"
+          jq --arg version "$new_version" --arg image "$image" \
+            '.version = $version | .docker_image = $image' \
+            gladys-assistant-integration.json > "$tmp"
+          mv "$tmp" gladys-assistant-integration.json
+
+          echo "version=${new_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add package.json package-lock.json gladys-assistant-integration.json
+          git commit -m "chore(release): ${VERSION}"
+          git tag -a "v${VERSION}" -m "Release ${VERSION}"
+
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "v${VERSION}"
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      version: ${{ needs.prepare.outputs.version }}

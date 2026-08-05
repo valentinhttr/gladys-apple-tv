@@ -1,0 +1,108 @@
+# -----------------------------------------------------------------------------
+# Publish the rolling development image.
+#
+# Every push to `main` (and any manual run) republishes
+# `ghcr.io/<owner>/<repo>:dev`, so a change can be tried on a real Apple TV
+# without cutting a release. The released tags and `latest` are never touched.
+#
+# Installing it in Gladys, once:
+#   Integrations -> Installer depuis GitHub -> "Mode développeur"
+#   -> Image Docker: ghcr.io/<owner>/<repo>:dev  (leave the manifest empty)
+#
+# The manifest field can stay empty because this workflow copies the manifest
+# into the `io.gladysassistant.manifest` image label, which is exactly where
+# Gladys reads it for a dev install. Two fields are rewritten on the way in:
+#   - `docker_image`, so it names the :dev tag actually installed;
+#   - `version`, suffixed with the run number, so the Supervision tab shows
+#     WHICH dev build is running instead of the last released version.
+# The name gets a "(dev)" suffix so this install is impossible to confuse with
+# the store one — both can be installed side by side.
+#
+# Picking up a new build afterwards:
+#   the integration page -> Supervision -> "Forcer la mise à jour"
+#   (a dev install has no store entry, so no "update available" banner: the
+#   force button re-pulls the :dev tag and recreates the container).
+# -----------------------------------------------------------------------------
+name: Publish the dev image
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'assets/**'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+# A push landing while the previous build is still running makes that build
+# obsolete: the :dev tag only ever means "the tip of main".
+concurrency:
+  group: dev-image
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      # The same gates as CI, before publishing: a dev image is meant to be
+      # installed on a real Gladys, so a red build must not reach it.
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm test
+
+      - name: Build the dev manifest label
+        id: manifest
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:dev"
+          version="$(jq -r .version gladys-assistant-integration.json)-dev.${GITHUB_RUN_NUMBER}"
+
+          # -c: the label value must be a single line.
+          manifest="$(jq -c \
+            --arg image "$image" \
+            --arg version "$version" \
+            '.docker_image = $image | .version = $version | .name = (.name + " (dev)")' \
+            gladys-assistant-integration.json)"
+
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=ghcr.io/${GITHUB_REPOSITORY,,}:dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "manifest=${manifest}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${image} as ${version}"
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          # arm64 as well: the point of a dev image is to run on the same
+          # machine as the user's Gladys, Raspberry Pi included.
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.manifest.outputs.image }},${{ steps.manifest.outputs.sha_tag }}
+          labels: |
+            io.gladysassistant.manifest=${{ steps.manifest.outputs.manifest }}
