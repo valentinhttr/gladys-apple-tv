@@ -68,6 +68,34 @@ REMOTE_ACTIONS = frozenset(
     }
 )
 
+# Keys served by Companion whenever Companion is paired, instead of by whichever
+# protocol wins the pyatv facade (MRP, tunnelled over AirPlay since tvOS 15).
+#
+# tvOS does not read a directional key as an event but as a GESTURE: it measures
+# the interval between the HID key-down and the key-up, and hands the result to a
+# tap or a long-press recognizer (pyatv#792). pyatv sends the two events back to
+# back with no delay, but over MRP they travel through the AirPlay tunnel, and
+# that latency is enough for the home screen to see a HELD key and auto-repeat —
+# one press of Left moves the focus by two applications instead of one.
+#
+# Companion is the protocol the click ring of a physical Siri Remote speaks: its
+# `_hidC` button events go over their own connection, so the down/up pair stays
+# short. Only the navigation keys are rerouted; the media commands stay on the
+# facade, where MRP carries real playback semantics (`play_pause` reads the
+# current playback state) that Companion's blind HID button cannot.
+COMPANION_FIRST_ACTIONS = frozenset(
+    {
+        "up",
+        "down",
+        "left",
+        "right",
+        "select",
+        "menu",
+        "home",
+        "control_center",
+    }
+)
+
 # Capability name reported to Node -> the pyatv feature that backs it. Node uses
 # this to decide which Gladys features are worth publishing for a device: an
 # Apple TV driven over HDMI-CEC has no readable volume level, publishing a
@@ -401,11 +429,31 @@ class DeviceSession(
             )
         return self.atv
 
+    async def _remote_key(self, atv: interface.AppleTV, action: str) -> None:
+        """Press one remote key, over Companion when that is the better path.
+
+        See COMPANION_FIRST_ACTIONS. Falls back to the facade when Companion is
+        not paired, or when it turns out not to implement the key after all: a
+        navigation key that works over a slower protocol beats one that raises.
+        """
+        if action in COMPANION_FIRST_ACTIONS:
+            companion = atv.remote_control.get(Protocol.Companion)
+            if companion is not None:
+                LOGGER.debug("Sending %s over Companion to %s", action, self.identifier)
+                try:
+                    await getattr(companion, action)()
+                    return
+                except pyatv_exceptions.NotSupportedError:
+                    LOGGER.debug("Companion does not serve %s, falling back", action)
+
+        LOGGER.debug("Sending %s over %s", action, atv.remote_control.main_protocol)
+        await getattr(atv.remote_control, action)()
+
     async def command(self, action: str, value: Any = None) -> Dict[str, Any]:
         atv = self._require_atv()
 
         if action in REMOTE_ACTIONS:
-            await getattr(atv.remote_control, action)()
+            await self._remote_key(atv, action)
         elif action == "turn_on":
             await atv.power.turn_on()
         elif action == "turn_off":
@@ -801,6 +849,81 @@ class Bridge:
             await self.storage.save()
 
 
+def _self_test() -> None:
+    """Check the assumptions this file makes about pyatv, against real pyatv.
+
+    Only one so far, and it is the one that silently breaks on an upgrade: that
+    a remote key can be steered to a specific protocol. `Relayer.get` is how
+    COMPANION_FIRST_ACTIONS reaches Companion instead of the facade's own
+    choice; if pyatv ever renames it, or stops ranking MRP above Companion, the
+    navigation keys go back to moving the focus two applications at a time and
+    nothing else would tell us.
+    """
+    from pyatv.core.facade import FacadeRemoteControl
+
+    calls = []
+
+    class _Probe(interface.RemoteControl):
+        """A RemoteControl that records which protocol was asked, and for what.
+
+        The keys are declared as real methods: pyatv's Relayer routes to the
+        instance that OVERRIDES the interface method, so a __getattr__ trick
+        would be invisible to it.
+        """
+
+        def __init__(self, tag: str) -> None:
+            self.tag = tag
+
+        async def up(self, action=None) -> None:
+            calls.append((self.tag, "up"))
+
+        async def down(self, action=None) -> None:
+            calls.append((self.tag, "down"))
+
+        async def left(self, action=None) -> None:
+            calls.append((self.tag, "left"))
+
+        async def right(self, action=None) -> None:
+            calls.append((self.tag, "right"))
+
+        async def select(self, action=None) -> None:
+            calls.append((self.tag, "select"))
+
+        async def menu(self, action=None) -> None:
+            calls.append((self.tag, "menu"))
+
+        async def home(self, action=None) -> None:
+            calls.append((self.tag, "home"))
+
+        async def control_center(self) -> None:
+            calls.append((self.tag, "control_center"))
+
+    facade = FacadeRemoteControl()
+    facade.register(_Probe("mrp"), Protocol.MRP)
+    facade.register(_Probe("companion"), Protocol.Companion)
+
+    assert facade.main_protocol is Protocol.MRP, (
+        f"pyatv no longer prefers MRP ({facade.main_protocol}): re-check whether "
+        "the navigation keys still need to be steered to Companion"
+    )
+
+    class _Atv:
+        remote_control = facade
+
+    session = object.__new__(DeviceSession)
+    session.identifier = "self-test"
+    for action in sorted(COMPANION_FIRST_ACTIONS):
+        asyncio.run(session._remote_key(_Atv(), action))  # noqa: SLF001
+
+    served_by = {tag for tag, _ in calls}
+    assert served_by == {"companion"}, f"navigation keys served by {served_by}, expected Companion"
+    # Also catches a key added to COMPANION_FIRST_ACTIONS without a probe for
+    # it: the relay would then answer from the interface stub, recording nothing.
+    assert {name for _, name in calls} == COMPANION_FIRST_ACTIONS, (
+        f"keys actually sent: {sorted(name for _, name in calls)}"
+    )
+
+
 def main() -> int:
     logging.basicConfig(
         stream=sys.stderr,
@@ -815,7 +938,10 @@ def main() -> int:
     storage_file = os.environ.get("PYATV_STORAGE_FILE", "/data/pyatv.json")
     if "--self-test" in sys.argv:
         # Used by the Docker build to prove the interpreter, pyatv and this file
-        # all load in the final image.
+        # all load in the final image — and to check the few assumptions this
+        # file makes about pyatv internals, which no unit test can cover
+        # (the CI has no pyatv, the image does).
+        _self_test()
         print(json.dumps({"ok": True, "pyatv": pyatv.const.__version__}))
         return 0
 

@@ -45,7 +45,9 @@ transport keys and the volume appear twice:
 - **device-in-room box** — since Gladys 4.84.3 every `television` type that is
   not a continuous control (binary, volume, channel) is rendered as a real push
   button, so the whole remote is clickable from a dashboard. That box only
-  offers types it supports, and `music/play` is not one of them.
+  offers types it supports, and `music/play` is not one of them. Pressing one
+  sends the value `1` once; what reaches the Apple TV is one key press, see
+  "Remote keys" below.
 - **Music box** — wants exactly the `music` set, so a paired Apple TV can be
   driven like a Sonos. It renders its own transport bar and never shows the
   feature names, which is why that set carries the prefixed ones.
@@ -147,6 +149,36 @@ unpaired and disabled at connection time, saving the user a third PIN.
 
 Credentials are stored by pyatv in `/data/pyatv.json`, the only writable path in
 the sandbox.
+
+The Apple TV to pair is picked from a `select` field with `source: "devices"`,
+which the core fills with the integration's own devices — so nobody has to look
+up an IP address. Those dynamic options are only resolved server side from
+Gladys 4.85.0 (`getDynamicOptions`); on an older core such a field is rejected
+with `must be one of ` and an empty list, hence the `gladys_version` floor. The
+price is that a device must be added from the Discovery tab before it can be
+paired, which is the order the manifest walks the user through anyway.
+
+### Remote keys
+
+tvOS does not read a directional key as an event but as a **gesture**: it
+measures the interval between the HID key-down and the key-up and hands the
+result to a tap or a long-press recognizer ([pyatv#792][pyatv-792]). pyatv sends
+the two back to back with no delay, but over MRP they travel through the AirPlay
+tunnel, and that latency is enough for the home screen to see a _held_ key and
+auto-repeat — one press of Left moves the focus by two applications.
+
+So the navigation keys (`COMPANION_FIRST_ACTIONS`) are steered to **Companion**,
+the protocol the click ring of a physical Siri Remote speaks, instead of
+whichever protocol wins the pyatv facade (MRP, which outranks Companion). Media
+commands stay on the facade, where MRP carries real playback semantics —
+`play_pause` reads the current playback state — that Companion's blind HID
+button cannot.
+
+`Relayer.get(Protocol.Companion)` is what makes the detour possible, and it is a
+pyatv internal: the image build asserts it still works, and still matters, via
+`pyatv_bridge.py --self-test`.
+
+[pyatv-792]: https://github.com/postlund/pyatv/issues/792
 
 ### State publication
 

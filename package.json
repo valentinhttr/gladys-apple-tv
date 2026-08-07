@@ -1,6 +1,6 @@
 {
   "name": "gladys-apple-tv",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "External Gladys Assistant integration to discover, pair and control Apple TV devices with pyatv.",
   "homepage": "https://github.com/valentinhttr/gladys-apple-tv#readme",
@@ -25,7 +25,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@gladysassistant/integration-sdk": "0.10.0"
+    "@gladysassistant/integration-sdk": "0.11.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

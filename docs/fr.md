@@ -10,6 +10,7 @@ n'est nécessaire.
 ## Prérequis
 
 - Une Apple TV (HD, 4K, toute génération sous tvOS 15 ou plus récent).
+- Gladys 4.85.0 ou plus récent.
 - L'Apple TV et votre serveur Gladys sur le **même réseau**. S'ils sont sur des
   VLAN ou sous-réseaux différents, voir « Réseaux séparés » plus bas.
 - Un accès physique au téléviseur pendant l'appairage : Apple affiche un code à
@@ -17,14 +18,18 @@ n'est nécessaire.
 
 ## Mise en route
 
+Trois étapes, dans cet ordre. Une Apple TV doit être **ajoutée** puis
+**appairée** avant que la moindre commande fonctionne : l'ajouter seulement vous
+donne un appareil qui n'obéit à rien.
+
 ### 1. Trouver votre Apple TV
 
-Ouvrez l'onglet **Découverte** de l'intégration et lancez une recherche. Gladys
-écoute les annonces AirPlay de votre réseau, et l'intégration vérifie chaque
-adresse candidate directement avec pyatv. Votre Apple TV apparaît avec son nom
-et son modèle.
+Ouvrez l'onglet **Découverte** de l'intégration et cliquez sur **Scanner**.
+Gladys écoute les annonces AirPlay de votre réseau, et l'intégration vérifie
+chaque adresse candidate directement avec pyatv. Votre Apple TV apparaît avec
+son nom et son modèle.
 
-Cliquez sur **Ajouter** pour créer l'appareil dans Gladys. Une Apple TV porte
+Cliquez sur **Ajouter à Gladys** pour créer l'appareil. Une Apple TV porte
 généralement le nom de la pièce où elle se trouve (« Séjour ») : l'appareil est
 donc créé sous le nom « Apple TV Séjour » — lisible dans une liste d'appareils,
 et c'est aussi ce qui rend son sélecteur lisible dans les scènes. Vous pouvez le
@@ -35,12 +40,12 @@ renommer ensuite dans l'onglet Appareils.
 L'appairage autorise Gladys à contrôler l'appareil. Il se fait dans l'onglet
 **Configuration**, avec les deux premiers boutons :
 
-1. **Appairer une Apple TV** — saisissez l'adresse IP de votre Apple TV, ou son
-   nom si vous l'avez déjà ajoutée. Laissez le champ vide si vous n'en avez
-   qu'une. Un code s'affiche sur votre téléviseur.
-2. **Saisir le code** — tapez le code affiché à l'écran.
-
-Vous pouvez appairer avant d'ajouter l'appareil : l'adresse IP suffit.
+1. **1. Appairer une Apple TV** — choisissez votre Apple TV dans la liste
+   déroulante et cliquez sur **Exécuter**. La liste contient les Apple TV
+   ajoutées à l'étape 1 : aucune adresse IP à chercher. Un code s'affiche sur
+   votre téléviseur.
+2. **2. Saisir le code** — tapez le code affiché à l'écran, puis cliquez sur
+   **Exécuter**.
 
 Apple demande un code **par protocole** : une fois le premier code accepté, un
 second s'affiche sur le téléviseur. Deux codes, c'est normal.
@@ -110,6 +115,10 @@ utiliser, vous n'avez donc jamais à choisir.
 
 ## Autres actions
 
+Chacune agit sur une Apple TV choisie dans une liste déroulante — la même que
+celle des boutons d'appairage, remplie avec les appareils ajoutés depuis
+l'onglet Découverte.
+
 - **Reconnecter et actualiser** — rouvre la session et relit l'appareil. La
   première chose à essayer quand un état semble figé.
 - **Lister les applications installées** — affiche l'identifiant de chaque
@@ -146,6 +155,10 @@ NAS, serveur) est réellement sur le réseau et n'a pas besoin de cela.
 **Toutes les commandes échouent avec « pas encore appairée ».** L'appareil a été
 ajouté mais jamais appairé. Lancez les deux boutons d'appairage dans l'onglet
 Configuration.
+
+**La liste déroulante de l'appairage est vide.** Elle ne contient que les Apple
+TV déjà ajoutées à Gladys : l'étape 1 n'a donc pas été faite. Allez dans l'onglet
+Découverte, cliquez sur **Scanner**, puis sur **Ajouter à Gladys**.
 
 **L'appairage échoue ou le code est refusé.** Le code expire vite — relancez
 l'étape 1 et saisissez-le immédiatement. Si l'échec persiste, retirez Gladys de

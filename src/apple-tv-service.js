@@ -324,32 +324,6 @@ export class AppleTvService {
     }
   }
 
-  /**
-   * The descriptor of a device, from the last scan or from a fresh unicast query.
-   *
-   * @param {string} identifier pyatv identifier.
-   * @param {string} [host] Address to query when the last scan does not have it.
-   * @returns {Promise<object|undefined>} The descriptor, when found.
-   * @example
-   * await service.describeDevice(identifier, '192.168.1.20');
-   */
-  async describeDevice(identifier, host) {
-    const cached = this.lastScan.get(identifier);
-    if (cached) {
-      return cached;
-    }
-    const address = host || this.devices.get(identifier)?.host;
-    if (!address) {
-      return undefined;
-    }
-    const { devices } = await this.bridge.request(
-      'scan',
-      { hosts: [address], timeout: this.config.scanTimeout },
-      { timeout: (this.config.scanTimeout + 20) * 1000 },
-    );
-    return (devices || []).find((device) => device.identifier === identifier) || devices?.[0];
-  }
-
   // -- commands ------------------------------------------------------------
 
   /**

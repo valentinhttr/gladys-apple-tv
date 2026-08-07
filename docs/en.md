@@ -9,6 +9,7 @@ uses. Nothing goes through Apple's servers, and no Apple ID is required.
 ## Requirements
 
 - An Apple TV (HD, 4K, any generation running tvOS 15 or later).
+- Gladys 4.85.0 or later.
 - The Apple TV and your Gladys server on the **same network**. If they are on
   different VLANs or subnets, see "Different subnets" below.
 - Physical access to the television during pairing: Apple displays a code on the
@@ -16,14 +17,18 @@ uses. Nothing goes through Apple's servers, and no Apple ID is required.
 
 ## Setting it up
 
+Three steps, in this order. An Apple TV has to be **added** and then **paired**
+before a single command works — adding it alone gets you a device that obeys
+nothing.
+
 ### 1. Find your Apple TV
 
-Open the **Discovery** tab of the integration and run a scan. Gladys listens for
-the AirPlay announcements on your network, and the integration checks every
+Open the **Discovery** tab of the integration and press **Scan**. Gladys listens
+for the AirPlay announcements on your network, and the integration checks every
 candidate address directly with pyatv. Your Apple TV appears with its name and
 its model.
 
-Click **Add** to create the device in Gladys. An Apple TV is usually named after
+Press **Add to Gladys** to create the device. An Apple TV is usually named after
 the room it sits in ("Living room"), so the device is created as "Apple TV
 Living room" — clear in a device list, and it is also what makes its selector
 readable in scenes. You can rename it afterwards in the Devices tab.
@@ -33,12 +38,10 @@ readable in scenes. You can rename it afterwards in the Devices tab.
 Pairing is what authorizes Gladys to control the device. It happens in the
 **Configuration** tab, with the first two buttons:
 
-1. **Pair an Apple TV** — type the IP address of your Apple TV, or its name if
-   you already added it. Leave the field empty if you have only one. A code
-   appears on your television.
-2. **Enter the code** — type the code you see on screen.
-
-You can pair before adding the device: the IP address is enough.
+1. **1. Pair an Apple TV** — pick your Apple TV in the dropdown and press
+   **Run**. The list holds the Apple TVs you added at step 1, so there is no IP
+   address to look up. A code appears on your television.
+2. **2. Enter the code** — type the code you see on screen, then press **Run**.
 
 Apple asks for one code **per protocol**: after the first code is accepted, a
 second one appears on the television. Two codes is normal.
@@ -102,6 +105,9 @@ have to choose between them.
 
 ## Other actions
 
+Each one acts on an Apple TV you pick in a dropdown — the same list as the
+pairing buttons, filled with the devices you added from the Discovery tab.
+
 - **Reconnect and refresh** — reopen the session and read the device again. The
   first thing to try when something looks stale.
 - **List the installed applications** — shows the bundle identifier of every
@@ -135,6 +141,10 @@ this.
 
 **Every command fails with "not paired yet".** The device was added but never
 paired. Run the two pairing buttons in the Configuration tab.
+
+**The pairing dropdown is empty.** It only lists Apple TVs already added to
+Gladys, so step 1 has not happened yet: go to the Discovery tab, press **Scan**,
+then **Add to Gladys**.
 
 **Pairing fails or the code is refused.** The code expires quickly — start again
 and enter it right away. If it keeps failing, remove Gladys from the Apple TV

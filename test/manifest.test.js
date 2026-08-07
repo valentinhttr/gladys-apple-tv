@@ -71,19 +71,27 @@ describe('manifest', () => {
     }
   });
 
-  it('never uses a dynamic select in an action', () => {
-    // The Gladys core validates action fields against `field.options`, which a
-    // `select` with `source: "devices"` does not carry — its options are filled
-    // in by the frontend. Any value submitted for such a field is rejected with
-    // `must be one of ` and an empty list, so the action is simply unusable.
+  it('picks the target Apple TV from a dropdown, never from a typed address', () => {
+    // Nobody should have to look up an IP address to pair a device: every
+    // action targets a device already added from the Discovery tab, chosen in
+    // a `select` the core fills with the integration's own devices.
     for (const action of manifest.actions) {
-      for (const field of action.fields || []) {
-        assert.ok(
-          !field.source,
-          `${action.key}.${field.key}: a field with a "source" can never be validated by the core`,
-        );
+      const field = (action.fields || []).find((entry) => entry.key === 'device');
+      if (!field) {
+        continue;
       }
+      assert.equal(field.type, 'select', `${action.key}.device must be a select`);
+      assert.equal(field.source, 'devices', `${action.key}.device must be filled by the core`);
+      assert.ok(!field.options, `${action.key}.device: options and source are mutually exclusive`);
+      assert.equal(field.required, true, `${action.key}.device must be required`);
     }
+  });
+
+  it('requires the Gladys version that resolves dynamic select options', () => {
+    // `source: "devices"` is only validated server side from 4.85.0
+    // (getDynamicOptions). On an older core every action above is rejected
+    // with "must be one of " and an empty list, whatever the user picks.
+    assert.equal(manifest.gladys_version, '>=4.85.0');
   });
 
   it('gives every action enough time for its slowest step', () => {

@@ -6,10 +6,10 @@
     "en": "Control your Apple TV: power, remote, playback, volume and applications.",
     "fr": "Contrôlez votre Apple TV : alimentation, télécommande, lecture, volume et applications."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.0.0",
+  "version": "1.1.0",
+  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.1.0",
   "cover_image": "https://raw.githubusercontent.com/valentinhttr/gladys-apple-tv/main/assets/cover.jpg",
-  "gladys_version": ">=4.84.3",
+  "gladys_version": ">=4.85.0",
   "transports": ["local"],
   "network_discovery": [
     {
@@ -22,12 +22,12 @@
       "key": "how_it_works",
       "type": "section",
       "label": {
-        "en": "How it works",
-        "fr": "Fonctionnement"
+        "en": "Setting up your Apple TV, step by step",
+        "fr": "Configurer votre Apple TV, étape par étape"
       },
       "description": {
-        "en": "1. Run a scan from the Discovery tab: Gladys captures the AirPlay announcements on your network and this integration checks each candidate with pyatv. 2. Add your Apple TV. 3. Pair it with the two buttons at the bottom of this page. An Apple TV must be paired before any command works.",
-        "fr": "1. Lancez une recherche dans l'onglet Découverte : Gladys capte les annonces AirPlay de votre réseau et l'intégration vérifie chaque candidat avec pyatv. 2. Ajoutez votre Apple TV. 3. Appairez-la avec les deux boutons en bas de cette page. Une Apple TV doit être appairée avant que la moindre commande fonctionne."
+        "en": "An Apple TV has to be added AND paired before a single command works. Three steps, in this order. 1) Discovery tab: press \"Scan\", wait, then press \"Add to Gladys\" on your Apple TV. It now exists in Gladys, but obeys nothing yet. 2) Back on this page, at the bottom: run \"1. Pair an Apple TV\" and pick it from the list — no IP address to look up. A code appears on your television; type it in \"2. Enter the code\". Apple asks for one code per protocol, so a second code follows: clear the field and type the new one in its place. 3) Discovery tab again: press \"Update\" on your Apple TV to pick up the volume control and the application shortcuts that the pairing revealed.",
+        "fr": "Une Apple TV doit être ajoutée ET appairée avant que la moindre commande fonctionne. Trois étapes, dans cet ordre. 1) Onglet Découverte : cliquez sur « Scanner », patientez, puis sur « Ajouter à Gladys » sur votre Apple TV. Elle existe alors dans Gladys, mais n'obéit encore à rien. 2) De retour sur cette page, tout en bas : lancez « 1. Appairer une Apple TV » et choisissez-la dans la liste — aucune adresse IP à chercher. Un code s'affiche sur votre téléviseur ; saisissez-le dans « 2. Saisir le code ». Apple demande un code par protocole, un second code suit donc : effacez le champ et saisissez le nouveau à la place. 3) Onglet Découverte à nouveau : cliquez sur « Mettre à jour » sur votre Apple TV pour récupérer le volume et les raccourcis d'applications révélés par l'appairage."
       },
       "links": [
         {
@@ -38,6 +38,18 @@
           }
         }
       ]
+    },
+    {
+      "key": "discovery_settings",
+      "type": "section",
+      "label": {
+        "en": "Finding your Apple TV",
+        "fr": "Trouver votre Apple TV"
+      },
+      "description": {
+        "en": "These two settings only affect the scan of the Discovery tab. The defaults work on a normal home network: leave them alone unless a scan comes back empty.",
+        "fr": "Ces deux réglages ne concernent que le scan de l'onglet Découverte. Les valeurs par défaut conviennent à un réseau domestique classique : n'y touchez que si un scan ne trouve rien."
+      }
     },
     {
       "key": "scan_timeout",
@@ -63,8 +75,8 @@
         "fr": "Adresses IPv4 manuelles"
       },
       "description": {
-        "en": "Optional, comma separated. Needed only when Gladys and your Apple TV are on different subnets or VLANs, where mDNS announcements do not travel. They are added to the automatic discovery.",
-        "fr": "Facultatif, séparées par des virgules. Utile uniquement si Gladys et votre Apple TV sont sur des sous-réseaux ou VLAN différents, où les annonces mDNS ne circulent pas. Elles s'ajoutent à la découverte automatique."
+        "en": "Optional, comma separated. Needed only when Gladys and your Apple TV are on different subnets or VLANs, where mDNS announcements do not travel. They are added to the automatic discovery, so the Apple TV still shows up in the Discovery tab like any other.",
+        "fr": "Facultatif, séparées par des virgules. Utile uniquement si Gladys et votre Apple TV sont sur des sous-réseaux ou VLAN différents, où les annonces mDNS ne circulent pas. Elles s'ajoutent à la découverte automatique : l'Apple TV apparaît alors dans l'onglet Découverte comme les autres."
       },
       "placeholder": {
         "en": "192.168.1.20, 192.168.1.21",
@@ -72,6 +84,18 @@
       },
       "required": false,
       "default": ""
+    },
+    {
+      "key": "device_settings",
+      "type": "section",
+      "label": {
+        "en": "What the device exposes",
+        "fr": "Ce que l'appareil expose"
+      },
+      "description": {
+        "en": "These settings shape the Gladys device itself. Changing one takes effect on the next \"Update\" you accept in the Discovery tab.",
+        "fr": "Ces réglages façonnent l'appareil Gladys lui-même. Une modification prend effet au prochain « Mettre à jour » accepté dans l'onglet Découverte."
+      }
     },
     {
       "key": "poll_frequency",
@@ -146,6 +170,18 @@
       "default": 25,
       "min": 0,
       "max": 100
+    },
+    {
+      "key": "actions_intro",
+      "type": "section",
+      "label": {
+        "en": "Pairing and tools, with the buttons below",
+        "fr": "Appairage et outils, avec les boutons ci-dessous"
+      },
+      "description": {
+        "en": "Everything below this line acts on an Apple TV you already added from the Discovery tab: pick it in the list, then press \"Run\". The first two buttons are the pairing itself and they go together — start with \"1. Pair an Apple TV\". The others are troubleshooting tools you will rarely need.",
+        "fr": "Tout ce qui suit agit sur une Apple TV déjà ajoutée depuis l'onglet Découverte : choisissez-la dans la liste, puis cliquez sur « Exécuter ». Les deux premiers boutons forment l'appairage et vont ensemble — commencez par « 1. Appairer une Apple TV ». Les autres sont des outils de dépannage dont vous n'aurez presque jamais besoin."
+      }
     }
   ],
   "actions": [
@@ -156,27 +192,24 @@
         "fr": "1. Appairer une Apple TV"
       },
       "description": {
-        "en": "Type the IP address of your Apple TV (or its name if it is already added). A code appears on your television.",
-        "fr": "Saisissez l'adresse IP de votre Apple TV (ou son nom si elle est déjà ajoutée). Un code s'affiche sur votre téléviseur."
+        "en": "Pick your Apple TV, press \"Run\", and a code appears on your television. Keep it in sight: the next button is where you type it.",
+        "fr": "Choisissez votre Apple TV, cliquez sur « Exécuter », et un code s'affiche sur votre téléviseur. Gardez-le sous les yeux : c'est le bouton suivant qui le réclame."
       },
       "timeout_seconds": 120,
       "fields": [
         {
           "key": "device",
-          "type": "string",
+          "type": "select",
+          "source": "devices",
           "label": {
             "en": "Apple TV",
             "fr": "Apple TV"
           },
           "description": {
-            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one. For a first pairing, type its IP address: it does not have to exist in Gladys yet.",
-            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une. Pour un premier appairage, saisissez son adresse IP : elle n'a pas besoin d'exister déjà dans Gladys."
+            "en": "The Apple TVs already added to Gladys. Empty list? Run a scan from the Discovery tab and add yours first.",
+            "fr": "Les Apple TV déjà ajoutées à Gladys. Liste vide ? Lancez d'abord un scan dans l'onglet Découverte et ajoutez la vôtre."
           },
-          "placeholder": {
-            "en": "192.168.1.20",
-            "fr": "192.168.1.20"
-          },
-          "required": false
+          "required": true
         }
       ]
     },
@@ -187,8 +220,8 @@
         "fr": "2. Saisir le code"
       },
       "description": {
-        "en": "Enter the code displayed on your television. Apple asks for one code per protocol: when a second code appears, CLEAR this field and type the new code in its place, then press the button again.",
-        "fr": "Saisissez le code affiché sur votre téléviseur. Apple demande un code par protocole : lorsqu'un second code apparaît, EFFACEZ ce champ et saisissez le nouveau code à la place, puis relancez le bouton."
+        "en": "Type the code displayed on your television, then press \"Run\". Apple asks for one code per protocol: when a second code appears, CLEAR this field and type the new code in its place.",
+        "fr": "Saisissez le code affiché sur votre téléviseur, puis cliquez sur « Exécuter ». Apple demande un code par protocole : lorsqu'un second code apparaît, EFFACEZ ce champ et saisissez le nouveau code à la place."
       },
       "timeout_seconds": 120,
       "fields": [
@@ -221,20 +254,13 @@
       "fields": [
         {
           "key": "device",
-          "type": "string",
+          "type": "select",
+          "source": "devices",
           "label": {
             "en": "Apple TV",
             "fr": "Apple TV"
           },
-          "description": {
-            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
-            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
-          },
-          "placeholder": {
-            "en": "192.168.1.20",
-            "fr": "192.168.1.20"
-          },
-          "required": false
+          "required": true
         }
       ]
     },
@@ -245,27 +271,20 @@
         "fr": "Lister les applications installées"
       },
       "description": {
-        "en": "Show the name and the bundle identifier of every installed application.",
-        "fr": "Affiche le nom et l'identifiant de chaque application installée."
+        "en": "Show the name and the bundle identifier of every installed application. The identifiers are what the \"Launch an application\" action and the scenes expect.",
+        "fr": "Affiche le nom et l'identifiant de chaque application installée. Ces identifiants sont ceux qu'attendent l'action « Lancer une application » et les scènes."
       },
       "timeout_seconds": 60,
       "fields": [
         {
           "key": "device",
-          "type": "string",
+          "type": "select",
+          "source": "devices",
           "label": {
             "en": "Apple TV",
             "fr": "Apple TV"
           },
-          "description": {
-            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
-            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
-          },
-          "placeholder": {
-            "en": "192.168.1.20",
-            "fr": "192.168.1.20"
-          },
-          "required": false
+          "required": true
         }
       ]
     },
@@ -275,24 +294,21 @@
         "en": "Launch an application",
         "fr": "Lancer une application"
       },
+      "description": {
+        "en": "Open an application by its bundle identifier, to check that it works before using it in a scene.",
+        "fr": "Ouvre une application depuis son identifiant, pour vérifier qu'elle répond avant de l'utiliser dans une scène."
+      },
       "timeout_seconds": 60,
       "fields": [
         {
           "key": "device",
-          "type": "string",
+          "type": "select",
+          "source": "devices",
           "label": {
             "en": "Apple TV",
             "fr": "Apple TV"
           },
-          "description": {
-            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
-            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
-          },
-          "placeholder": {
-            "en": "192.168.1.20",
-            "fr": "192.168.1.20"
-          },
-          "required": false
+          "required": true
         },
         {
           "key": "app_id",
@@ -300,6 +316,10 @@
           "label": {
             "en": "Bundle identifier",
             "fr": "Identifiant de l'application"
+          },
+          "description": {
+            "en": "Given by the \"List the installed applications\" action.",
+            "fr": "Donné par l'action « Lister les applications installées »."
           },
           "placeholder": {
             "en": "com.netflix.Netflix",
@@ -323,20 +343,13 @@
       "fields": [
         {
           "key": "device",
-          "type": "string",
+          "type": "select",
+          "source": "devices",
           "label": {
             "en": "Apple TV",
             "fr": "Apple TV"
           },
-          "description": {
-            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
-            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
-          },
-          "placeholder": {
-            "en": "192.168.1.20",
-            "fr": "192.168.1.20"
-          },
-          "required": false
+          "required": true
         },
         {
           "key": "url",
@@ -360,27 +373,20 @@
         "fr": "Supprimer l'appairage"
       },
       "description": {
-        "en": "Delete the stored credentials of an Apple TV. Use it when pairing has to be redone, for example after a factory reset.",
-        "fr": "Supprime les identifiants enregistrés d'une Apple TV. À utiliser lorsque l'appairage doit être refait, par exemple après une réinitialisation."
+        "en": "Delete the stored credentials of an Apple TV. Use it when pairing has to be redone, for example after a factory reset — then start again at \"1. Pair an Apple TV\".",
+        "fr": "Supprime les identifiants enregistrés d'une Apple TV. À utiliser lorsque l'appairage doit être refait, par exemple après une réinitialisation — reprenez ensuite à « 1. Appairer une Apple TV »."
       },
       "timeout_seconds": 60,
       "fields": [
         {
           "key": "device",
-          "type": "string",
+          "type": "select",
+          "source": "devices",
           "label": {
             "en": "Apple TV",
             "fr": "Apple TV"
           },
-          "description": {
-            "en": "Name or IPv4 address of the Apple TV. Leave empty if you have only one.",
-            "fr": "Nom ou adresse IPv4 de l'Apple TV. Laissez vide si vous n'en avez qu'une."
-          },
-          "placeholder": {
-            "en": "192.168.1.20",
-            "fr": "192.168.1.20"
-          },
-          "required": false
+          "required": true
         }
       ]
     }

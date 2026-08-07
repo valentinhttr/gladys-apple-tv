@@ -46,7 +46,7 @@ describe('resolveTarget', () => {
     const { gladys, service } = setup({ devices: [gladysDevice(), second] });
     await assert.rejects(
       () => resolveTarget({ gladys, service, fields: {} }),
-      /Several Apple TVs.*Living room, Bedroom/,
+      /Pick the Apple TV you want to act on/,
     );
   });
 
@@ -66,41 +66,28 @@ describe('resolveTarget', () => {
     }
   });
 
-  it('resolves an address Gladys does not know yet when pairing', async () => {
-    const { gladys, service } = setup({
-      devices: [],
-      handlers: { scan: () => ({ devices: [descriptor()] }) },
-    });
-    const target = await resolveTarget({
-      gladys,
-      service,
-      fields: { device: '192.168.1.20' },
-      allowHost: true,
-    });
-    assert.equal(target.identifier, IDENTIFIER);
+  it('resolves the external id the device dropdown submits', async () => {
+    // What the Configuration screen actually sends for a `select` field with
+    // `source: "devices"`: the external id of the chosen device, nothing else.
+    const { gladys, service } = setup();
+    const target = await resolveTarget({ gladys, service, fields: { device: EXTERNAL_ID } });
+    assert.deepEqual(target, { identifier: IDENTIFIER, host: '192.168.1.20', name: 'Living room' });
   });
 
-  it('refuses an unknown address outside the pairing action', async () => {
+  it('sends the user back to the Discovery tab when the device is gone', async () => {
     const { gladys, service } = setup();
     await assert.rejects(
-      () => resolveTarget({ gladys, service, fields: { device: '10.0.0.9' } }),
-      /Run a scan from the Discovery tab/,
+      () =>
+        resolveTarget({ gladys, service, fields: { device: 'ext:apple-tv-test:apple-tv:gone' } }),
+      /No Apple TV matches.*run a scan from the Discovery tab.*Living room/i,
     );
   });
 
-  it('lists the known Apple TVs when the text matches none of them', async () => {
-    const { gladys, service } = setup();
-    await assert.rejects(
-      () => resolveTarget({ gladys, service, fields: { device: 'apple-tv.local' } }),
-      /No Apple TV matches "apple-tv\.local".*Living room/,
-    );
-  });
-
-  it('tells the user to type an address when nothing is added yet', async () => {
+  it('sends the user back to the Discovery tab when nothing is added yet', async () => {
     const { gladys, service } = setup({ devices: [] });
     await assert.rejects(
-      () => resolveTarget({ gladys, service, fields: {}, allowHost: true }),
-      /type the IP address/,
+      () => resolveTarget({ gladys, service, fields: {} }),
+      /No Apple TV added yet.*Discovery tab/,
     );
   });
 });

@@ -1,4 +1,3 @@
-import { isIpv4 } from './config.js';
 import { PARAMS } from './constants.js';
 import { readParam } from './device-model.js';
 
@@ -65,28 +64,29 @@ export function describeStep(step, prefix = '', { clearField = false } = {}) {
 /**
  * Find the Apple TV targeted by an action.
  *
- * The `device` field is a plain text input, not a dropdown of the created
- * devices, and that is deliberate: the Gladys core validates every action field
- * against `field.options`, which a `select` with `source: "devices"` does not
- * have — its options are filled in by the frontend. Such a field is therefore
- * rejected with "must be one of " and an empty list, whatever is submitted. A
- * text input also covers the case the dropdown never could: pairing an Apple TV
- * before it exists as a Gladys device.
+ * The `device` field of every action is a `select` with `source: "devices"`:
+ * the Configuration screen fills the dropdown with the Apple TVs already added
+ * to Gladys and submits the `external_id` of the chosen one. Nobody has to look
+ * up an IP address to pair a device any more — the price is that an Apple TV
+ * must be added from the Discovery tab BEFORE it can be paired, which is the
+ * order the manifest walks the user through anyway.
  *
- * Accepted, in order: nothing at all when there is exactly one Apple TV, an
- * IPv4 address, a device name, or a device external id.
+ * Dynamic options need a core that resolves them server side (Gladys 4.85.0,
+ * `getDynamicOptions`); before that, such a field was rejected with "must be
+ * one of " and an empty list, hence the `gladys_version` floor in the manifest.
+ *
+ * Also accepted, for a handler reached outside the form: a name, a selector or
+ * an IP address, and nothing at all when a single Apple TV exists.
  *
  * @param {object} options Options.
  * @param {object} options.gladys Gladys SDK instance.
  * @param {object} options.service The Apple TV service.
  * @param {object} options.fields Values of the action form.
- * @param {boolean} [options.allowHost] Whether an address of a device Gladys
- * does not know yet is accepted (the pairing case).
  * @returns {Promise<object>} `{ identifier, host, name }`.
  * @example
- * await resolveTarget({ gladys, service, fields, allowHost: true });
+ * await resolveTarget({ gladys, service, fields });
  */
-export async function resolveTarget({ gladys, service, fields, allowHost = false }) {
+export async function resolveTarget({ gladys, service, fields }) {
   const wanted = typeof fields?.device === 'string' ? fields.device.trim() : '';
   const devices = gladys.devices || [];
 
@@ -96,16 +96,10 @@ export async function resolveTarget({ gladys, service, fields, allowHost = false
     }
     if (devices.length === 0) {
       throw new Error(
-        allowHost
-          ? 'No Apple TV added yet: type the IP address of the one you want to pair.'
-          : 'No Apple TV added yet. Run a scan from the Discovery tab first.',
+        'No Apple TV added yet. Run a scan from the Discovery tab and add yours first.',
       );
     }
-    throw new Error(
-      `Several Apple TVs are available: type the name or the IP address of the one you want (${devices
-        .map((device) => device.name)
-        .join(', ')}).`,
-    );
+    throw new Error('Pick the Apple TV you want to act on in the list above.');
   }
 
   const matched = devices.find(
@@ -119,25 +113,10 @@ export async function resolveTarget({ gladys, service, fields, allowHost = false
     return fromGladysDevice(matched, service);
   }
 
-  if (!isIpv4(wanted)) {
-    const known = devices.map((device) => device.name).join(', ');
-    throw new Error(
-      `No Apple TV matches "${wanted}". Type an IPv4 address, or one of: ${known || 'none added yet'}.`,
-    );
-  }
-  if (!allowHost) {
-    throw new Error(
-      `No Apple TV of Gladys has the address ${wanted}. Run a scan from the Discovery tab first.`,
-    );
-  }
-
-  const descriptor = await service.describeDevice(undefined, wanted);
-  if (!descriptor) {
-    throw new Error(
-      `No Apple TV answered at ${wanted}. Check the address and that the device is powered on.`,
-    );
-  }
-  return { identifier: descriptor.identifier, host: descriptor.address, name: descriptor.name };
+  const known = devices.map((device) => device.name).join(', ');
+  throw new Error(
+    `No Apple TV matches "${wanted}". It was probably deleted — run a scan from the Discovery tab and add it again. Known: ${known || 'none'}.`,
+  );
 }
 
 /**
@@ -183,7 +162,7 @@ export function buildActions({ gladys, bridge, service, logger }) {
   return {
     /** Step 1: open a pairing session; the Apple TV shows a code. */
     pair_start: async (fields) => {
-      const target = await resolveTarget({ gladys, service, fields, allowHost: true });
+      const target = await resolveTarget({ gladys, service, fields });
       logger.info(`Starting the pairing of ${target.name} (${target.host})`);
       lastPin = null;
 
@@ -246,8 +225,8 @@ export function buildActions({ gladys, bridge, service, logger }) {
       lastPin = null;
 
       if (identifier) {
-        // The device may have been paired from a raw address, before it even
-        // exists in Gladys: this is where its address becomes known.
+        // The worker answers with the address it actually reached, which is the
+        // authoritative one after a DHCP lease changed under us.
         service.rememberHost(identifier, result.device?.address);
         service.rememberDescriptor(result.device);
         await service.connectDevice(identifier);
@@ -262,14 +241,14 @@ export function buildActions({ gladys, bridge, service, logger }) {
       await service.refreshConnectionStatus();
 
       return {
-        en: 'Pairing complete. Your Apple TV is ready — if Gladys offers to update the device in the Discovery tab, accept it to get the volume and the application shortcuts.',
-        fr: "Appairage terminé. Votre Apple TV est prête — si Gladys propose de mettre à jour l'appareil dans l'onglet Découverte, acceptez pour obtenir le volume et les raccourcis d'applications.",
+        en: 'Pairing complete. Last step: go back to the Discovery tab and press "Update" on your Apple TV, to get the volume control and the application shortcuts the pairing just revealed.',
+        fr: "Appairage terminé. Dernière étape : retournez dans l'onglet Découverte et cliquez sur « Mettre à jour » sur votre Apple TV, pour récupérer le volume et les raccourcis d'applications révélés par l'appairage.",
       };
     },
 
     /** Drop the stored credentials, so the device can be paired again. */
     unpair: async (fields) => {
-      const target = await resolveTarget({ gladys, service, fields, allowHost: true });
+      const target = await resolveTarget({ gladys, service, fields });
       await bridge.request('forget', { identifier: target.identifier }, { timeout: 20_000 });
       const entry = service.devices.get(target.identifier);
       if (entry) {
