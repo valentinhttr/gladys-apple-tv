@@ -28,6 +28,11 @@ on:
         description: 'Version to publish'
         required: true
         type: string
+      ref:
+        description: 'Commit, branch or tag to build (defaults to the triggering ref)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -37,7 +42,15 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      # `ref` matters ONLY on the workflow_call path: a called workflow checks
+      # out the commit that TRIGGERED the run, not the bump commit release.yml
+      # has just pushed. Without it the image carries the manifest of the
+      # previous version — a `docker_image` tag that does not exist yet — and
+      # the store admission check below fails with a 404 on every release.
+      # Empty on the tag and manual paths, where the default ref is correct.
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Resolve the tags to publish
         id: tags

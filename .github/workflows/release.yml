@@ -99,3 +99,7 @@ jobs:
       packages: write
     with:
       version: ${{ needs.prepare.outputs.version }}
+      # Build the tag `prepare` just pushed, not the commit this run started
+      # from: the bump lives only in that commit, and the image label plus the
+      # store admission check both read the manifest off the working tree.
+      ref: v${{ needs.prepare.outputs.version }}
