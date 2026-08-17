@@ -78,15 +78,34 @@ describe('discoverAppleTvs', () => {
   it('verifies the mDNS candidates with pyatv', async () => {
     const gladys = new FakeGladys();
     gladys.scanNetworkResults = [
-      { name: 'Living room._airplay._tcp.local', addresses: ['192.168.1.20', 'fe80::1'] },
+      {
+        name: 'Living room._airplay._tcp.local',
+        host: 'Living-Room.local',
+        addresses: ['192.168.1.20', 'fe80::1'],
+        port: 7000,
+        txt: ['deviceid=92:18:15:B6:6D:D2'],
+      },
     ];
     const bridge = new FakeBridge({ scan: () => ({ devices: [descriptor()] }) });
+    const logger = fakeLogger();
 
-    const found = await discoverAppleTvs({ gladys, bridge, config, logger: fakeLogger() });
+    const found = await discoverAppleTvs({ gladys, bridge, config, logger });
 
     assert.deepEqual(bridge.calls[0].params.hosts, ['192.168.1.20']);
     assert.equal(found.length, 1);
     assert.equal(found[0].name, 'Living room');
+
+    const logs = logger.lines.info.join('\n');
+    assert.match(
+      logs,
+      /AirPlay announcement 1\/1: \{"name":"Living room\._airplay\._tcp\.local","host":"Living-Room\.local","addresses":\["192\.168\.1\.20","fe80::1"\],"ipv4":\["192\.168\.1\.20"\],"port":7000\}/,
+    );
+    assert.doesNotMatch(logs, /deviceid/);
+    assert.match(
+      logs,
+      /Candidate address 1\/1: \{"address":"192\.168\.1\.20","sources":\["AirPlay announcement"\]\}/,
+    );
+    assert.match(logs, /pyatv response 1\/1: \{"name":"Living room","address":"192\.168\.1\.20"/);
   });
 
   it('still scans the manual addresses when the mediated capture fails', async () => {
@@ -123,6 +142,53 @@ describe('discoverAppleTvs', () => {
       '192.168.1.30',
       '192.168.1.40',
     ]);
+  });
+
+  it('logs every source of a deduplicated candidate address', async () => {
+    const gladys = new FakeGladys();
+    gladys.scanNetworkResults = [{ addresses: ['192.168.1.20'] }];
+    const bridge = new FakeBridge({ scan: () => ({ devices: [descriptor()] }) });
+    const logger = fakeLogger();
+
+    await discoverAppleTvs({
+      gladys,
+      bridge,
+      config: normalizeConfig({ manual_hosts: '192.168.1.20' }),
+      logger,
+      extraHosts: ['192.168.1.20'],
+    });
+
+    assert.match(
+      logger.lines.info.join('\n'),
+      /"sources":\["AirPlay announcement","manual configuration","known Gladys device"\]/,
+    );
+  });
+
+  it('reports the candidates that did not answer pyatv', async () => {
+    const gladys = new FakeGladys();
+    gladys.scanNetworkResults = [{ addresses: ['192.168.1.20'] }, { addresses: ['192.168.1.21'] }];
+    const bridge = new FakeBridge({ scan: () => ({ devices: [descriptor()] }) });
+    const logger = fakeLogger();
+
+    await discoverAppleTvs({ gladys, bridge, config, logger });
+
+    assert.match(
+      logger.lines.info.join('\n'),
+      /1 candidate address\(es\) did not answer pyatv: 192\.168\.1\.21/,
+    );
+  });
+
+  it('explains when none of the candidates answers the direct mDNS query', async () => {
+    const gladys = new FakeGladys();
+    gladys.scanNetworkResults = [{ addresses: ['10.20.0.40'] }];
+    const bridge = new FakeBridge({ scan: () => ({ devices: [] }) });
+    const logger = fakeLogger();
+
+    await discoverAppleTvs({ gladys, bridge, config, logger });
+
+    const warnings = logger.lines.warn.join('\n');
+    assert.match(warnings, /No candidate answered pyatv's direct mDNS query: 10\.20\.0\.40/);
+    assert.match(warnings, /separate VLANs/);
   });
 
   it('does not call pyatv when nothing was found', async () => {

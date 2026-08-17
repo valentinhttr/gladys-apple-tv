@@ -98,7 +98,7 @@ have to choose between them.
 | Setting                     | What it does                                                                                                              |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Discovery duration          | How long Gladys listens for AirPlay announcements. Increase it on a busy or slow network.                                 |
-| Manual IPv4 addresses       | Only needed when announcements do not reach Gladys (routed networks, VLANs). Added to the automatic discovery.            |
+| Manual IPv4 addresses       | Adds known targets when announcements do not reach Gladys. Does not by itself enable discovery across routed VLANs.       |
 | Refresh interval            | How often the integration reconciles what the Apple TV does not push by itself, typically the power state on some models. |
 | Application shortcuts       | Whether to expose one button per installed application.                                                                   |
 | Maximum number of shortcuts | An Apple TV can have a hundred applications; this bound keeps the device readable.                                        |
@@ -123,11 +123,21 @@ pairing buttons, filled with the devices you added from the Discovery tab.
 **The scan finds nothing.** Gladys captures AirPlay announcements from the host
 network. Check that your Apple TV is powered on, that AirPlay is enabled
 (Settings → AirPlay and HomeKit), and that Gladys is on the same network. If your
-Gladys server is on a different subnet, fill in the manual IPv4 address.
+Gladys server is on the same LAN but automatic capture fails, try the manual
+IPv4 address. An address alone cannot make pyatv discovery work across routed
+VLANs; see below.
 
-The integration log names what it saw: if it reports announcements that
-"carried no IPv4 address", your Apple TV _was_ announced but its address never
-reached Gladys — go straight to the manual address.
+The integration log lists every announcement (name, host, IPv4 address and
+port), the origin of every candidate address, every pyatv answer and every
+candidate that did not answer. If the Apple TV disappears from that list when
+you unplug it but pyatv never answers, the mediated AirPlay capture works and
+the direct verification is what the network blocks.
+
+**Gladys and the Apple TV are on routed subnets or separate VLANs.** The Apple
+TV normally ignores the direct mDNS query pyatv sends when its source is outside
+the local subnet. Opening UDP 5353 or entering a manual address does not change
+that mDNS rule. Full support requires the relevant Bonjour services to be
+relayed by network infrastructure or mediated by Gladys.
 
 **You run Gladys in Docker on a Mac or on Windows.** Discovery cannot work
 there, and it is not a misconfiguration on your side. Docker Desktop, OrbStack

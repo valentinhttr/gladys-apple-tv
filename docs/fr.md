@@ -108,7 +108,7 @@ utiliser, vous n'avez donc jamais à choisir.
 | Réglage                        | Effet                                                                                                                                |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Durée de la recherche          | Durée d'écoute des annonces AirPlay. À augmenter sur un réseau chargé ou lent.                                                       |
-| Adresses IPv4 manuelles        | Utile uniquement si les annonces n'arrivent pas jusqu'à Gladys (réseaux routés, VLAN). S'ajoutent à la découverte automatique.       |
+| Adresses IPv4 manuelles        | Ajoute des cibles connues si les annonces n'atteignent pas Gladys. Ne permet pas, seule, la découverte entre VLANs routés.           |
 | Intervalle de rafraîchissement | Fréquence de réconciliation de ce que l'Apple TV ne pousse pas d'elle-même, généralement l'état d'alimentation sur certains modèles. |
 | Raccourcis d'applications      | Exposer ou non un bouton par application installée.                                                                                  |
 | Nombre maximum de raccourcis   | Une Apple TV peut compter une centaine d'applications ; cette limite garde l'appareil lisible.                                       |
@@ -136,11 +136,22 @@ l'onglet Découverte.
 **La recherche ne trouve rien.** Gladys capte les annonces AirPlay depuis le
 réseau de l'hôte. Vérifiez que votre Apple TV est allumée, qu'AirPlay est activé
 (Réglages → AirPlay et HomeKit) et que Gladys est sur le même réseau. Si votre
-serveur Gladys est sur un autre sous-réseau, renseignez l'adresse IPv4 manuelle.
+serveur Gladys est sur le même réseau local mais que la capture automatique
+échoue, essayez l'adresse IPv4 manuelle. Une adresse seule ne permet pas à
+pyatv de découvrir un appareil entre VLANs routés ; voir ci-dessous.
 
-Le journal de l'intégration nomme ce qu'il a vu : s'il signale des annonces
-« sans adresse IPv4 », votre Apple TV _a bien_ été annoncée mais son adresse
-n'est jamais arrivée jusqu'à Gladys — passez directement par l'adresse manuelle.
+Le journal de l'intégration détaille chaque annonce (nom, hôte, adresse IPv4 et
+port), l'origine de chaque adresse candidate, chaque réponse de pyatv et chaque
+candidate restée sans réponse. Si l'Apple TV disparaît de cette liste lorsqu'on
+la débranche mais que pyatv ne répond jamais, la capture AirPlay médiée
+fonctionne et c'est la vérification directe que le réseau bloque.
+
+**Gladys et l'Apple TV sont sur des sous-réseaux routés ou VLANs distincts.**
+L'Apple TV ignore normalement la requête mDNS directe de pyatv lorsque sa source
+n'appartient pas au réseau local. Ouvrir UDP 5353 ou renseigner une adresse
+manuelle ne change pas cette règle mDNS. Le support complet nécessite que les
+services Bonjour utiles soient relayés par l'infrastructure réseau ou médiés
+par Gladys.
 
 **Vous faites tourner Gladys dans Docker sur un Mac ou sous Windows.** La
 découverte automatique ne peut pas fonctionner là, et ce n'est pas une erreur de

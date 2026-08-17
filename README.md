@@ -110,7 +110,10 @@ The integration container runs on a Docker bridge network, where multicast never
 arrives — pyatv cannot browse mDNS from in there. The manifest declares an
 `_airplay._tcp` capture, the Gladys core browses it from the host network, and
 the integration verifies each candidate address with a **unicast** pyatv query,
-which does cross the bridge. Manual addresses cover routed networks and VLANs.
+which does cross the bridge. Manual addresses cover cases where multicast is
+lost but the direct query still exits with an address on the Apple TV's local
+subnet. They cannot, by themselves, make that query work across routed VLANs:
+mDNS responders normally ignore a direct query from outside their local link.
 
 Only the first `network_discovery` entry of a given type is honoured by the core,
 so exactly one mDNS service is declared — a second one would silently do nothing.
@@ -120,10 +123,12 @@ that view is not always the LAN. Verified on a Mac running Gladys under
 OrbStack: `network_mode: host` puts the core on the virtual machine's bridge
 (`192.168.139.0/23`) while the Apple TV lives on `192.168.0.0/24`, so multicast
 never arrives and announcements come back partial — with a host name but no
-address record. Unicast still routes, which is why `manual_hosts` is a first
-class path and not a curiosity: it makes the whole integration work on any
-VM-backed Docker (Docker Desktop, OrbStack, Colima). Announcements that cannot
-be resolved to an address are named in the log rather than dropped in silence.
+address record. Desktop Docker's outbound NAT can still put the direct query
+back on the physical LAN, which is why `manual_hosts` remains a useful path for
+Docker Desktop, OrbStack and Colima. A genuinely routed VLAN is different: the
+Apple TV sees a non-local source and may ignore the query. The scan log lists
+every announcement, candidate source, pyatv answer and unanswered address so
+that this boundary is visible instead of looking like an unexplained empty scan.
 
 ### Pairing
 

@@ -30,6 +30,44 @@ export function addressesOf(announcement) {
 }
 
 /**
+ * Produce a stable, compact description of one announcement for the logs.
+ *
+ * TXT records are deliberately omitted: they are verbose and can contain
+ * identifiers that add no value to the first line of network diagnosis.
+ *
+ * @param {object} announcement One entry of the mediated mDNS scan.
+ * @returns {string} JSON containing the useful routing fields.
+ */
+function describeAnnouncement(announcement) {
+  const addresses = Array.isArray(announcement?.addresses)
+    ? announcement.addresses.map((address) => String(address))
+    : [];
+  return JSON.stringify({
+    name: announcement?.name || null,
+    host: announcement?.host || null,
+    addresses,
+    ipv4: addressesOf(announcement),
+    port: Number.isInteger(announcement?.port) ? announcement.port : null,
+  });
+}
+
+/**
+ * Produce a stable description of a pyatv answer for the logs.
+ *
+ * @param {object} device Device descriptor returned by the worker.
+ * @returns {string} JSON containing non-secret identification fields.
+ */
+function describeAnswer(device) {
+  return JSON.stringify({
+    name: device?.name || null,
+    address: device?.address || null,
+    model: device?.model || null,
+    operating_system: device?.operating_system || null,
+    is_apple_tv: Boolean(device?.is_apple_tv),
+  });
+}
+
+/**
  * Collect the candidate addresses of a mediated mDNS scan.
  *
  * An announcement can arrive with its SRV and TXT records but no A record — the
@@ -125,6 +163,11 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
   try {
     announcements = await gladys.scanNetwork('mdns', { timeoutSeconds: config.scanTimeout });
     logger.info(`Gladys captured ${announcements.length} AirPlay announcement(s)`);
+    announcements.forEach((announcement, index) => {
+      logger.info(
+        `AirPlay announcement ${index + 1}/${announcements.length}: ${describeAnnouncement(announcement)}`,
+      );
+    });
   } catch (error) {
     // A failed capture must not cancel the scan: the manually configured
     // addresses and the already known devices are still worth querying.
@@ -132,7 +175,28 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
   }
 
   const { hosts: announced, unresolved } = candidateHosts(announcements);
-  const hosts = [...new Set([...announced, ...config.manualHosts, ...extraHosts.filter(isIpv4)])];
+  const known = extraHosts.filter(isIpv4);
+  const sourcesByHost = new Map();
+  const addSource = (candidates, source) => {
+    for (const host of candidates) {
+      if (!sourcesByHost.has(host)) {
+        sourcesByHost.set(host, []);
+      }
+      if (!sourcesByHost.get(host).includes(source)) {
+        sourcesByHost.get(host).push(source);
+      }
+    }
+  };
+  addSource(announced, 'AirPlay announcement');
+  addSource(config.manualHosts, 'manual configuration');
+  addSource(known, 'known Gladys device');
+  const hosts = [...sourcesByHost.keys()];
+
+  hosts.forEach((host, index) => {
+    logger.info(
+      `Candidate address ${index + 1}/${hosts.length}: ${JSON.stringify({ address: host, sources: sourcesByHost.get(host) })}`,
+    );
+  });
 
   if (unresolved.length > 0) {
     // The single most useful line in the log when a device does not show up:
@@ -144,27 +208,46 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
     logger.warn(
       `${unresolved.length} announcement(s) carried no IPv4 address and were skipped: ${described}. ` +
         'This usually means Gladys and these devices are on different subnets, with an mDNS relay ' +
-        'forwarding the announcements but not the address records. Add their IP addresses in ' +
-        '"Manual IPv4 addresses" in the integration configuration.',
+        'forwarding the announcements but not the address records. A manual IPv4 address can help ' +
+        'only when direct traffic still exits on the device local subnet; it does not by itself ' +
+        'enable discovery across routed VLANs.',
     );
   }
 
   if (hosts.length === 0) {
     logger.warn(
       'No candidate address found. Check that Gladys and your Apple TV are on the same network, ' +
-        'or fill in the manual addresses in the integration configuration.',
+        'or try a manual address when direct traffic still exits on the Apple TV local subnet.',
     );
     return [];
   }
 
   logger.info(`Verifying ${hosts.length} candidate address(es) with pyatv`);
-  const { devices } = await bridge.request(
+  const { devices = [] } = await bridge.request(
     'scan',
     { hosts, timeout: config.scanTimeout },
     // pyatv queries the candidates concurrently, so the worst case is the scan
     // window itself plus the time to build the configurations.
     { timeout: (config.scanTimeout + 20) * 1000 },
   );
+
+  devices.forEach((device, index) => {
+    logger.info(`pyatv response ${index + 1}/${devices.length}: ${describeAnswer(device)}`);
+  });
+
+  const answeredHosts = new Set(devices.map((device) => device?.address).filter(Boolean));
+  const unansweredHosts = hosts.filter((host) => !answeredHosts.has(host));
+  if (devices.length === 0) {
+    logger.warn(
+      `No candidate answered pyatv's direct mDNS query: ${unansweredHosts.join(', ')}. ` +
+        'On routed networks or separate VLANs, Apple devices normally ignore direct mDNS queries ' +
+        'whose source is outside their local subnet.',
+    );
+  } else if (unansweredHosts.length > 0) {
+    logger.info(
+      `${unansweredHosts.length} candidate address(es) did not answer pyatv: ${unansweredHosts.join(', ')}`,
+    );
+  }
 
   const appleTvs = keepAppleTvs(devices);
   logger.info(`Found ${appleTvs.length} Apple TV(s)`);

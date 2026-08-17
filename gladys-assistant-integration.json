@@ -75,8 +75,8 @@
         "fr": "Adresses IPv4 manuelles"
       },
       "description": {
-        "en": "Optional, comma separated. Needed only when Gladys and your Apple TV are on different subnets or VLANs, where mDNS announcements do not travel. They are added to the automatic discovery, so the Apple TV still shows up in the Discovery tab like any other.",
-        "fr": "Facultatif, séparées par des virgules. Utile uniquement si Gladys et votre Apple TV sont sur des sous-réseaux ou VLAN différents, où les annonces mDNS ne circulent pas. Elles s'ajoutent à la découverte automatique : l'Apple TV apparaît alors dans l'onglet Découverte comme les autres."
+        "en": "Optional, comma separated. Useful when automatic announcements do not reach Gladys but direct traffic still exits on the Apple TV's local subnet, as with some desktop Docker setups. An address alone does not enable discovery across routed VLANs.",
+        "fr": "Facultatif, séparées par des virgules. Utile si les annonces automatiques n'atteignent pas Gladys mais que le trafic direct sort toujours sur le réseau local de l'Apple TV, comme avec certaines installations Docker de bureau. Une adresse seule ne permet pas la découverte entre VLANs routés."
       },
       "placeholder": {
         "en": "192.168.1.20, 192.168.1.21",
