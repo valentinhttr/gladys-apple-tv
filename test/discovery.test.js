@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { normalizeConfig } from '../src/config.js';
-import { addressesOf, candidateHosts, discoverAppleTvs, keepAppleTvs } from '../src/discovery.js';
+import {
+  addressesOf,
+  candidateHosts,
+  discoverAppleTvs,
+  keepAppleTvs,
+  serviceTypeOf,
+} from '../src/discovery.js';
 import { descriptor, FakeBridge, FakeGladys, fakeLogger } from './helpers.js';
 
 describe('addressesOf', () => {
@@ -16,6 +22,21 @@ describe('addressesOf', () => {
   it('tolerates an announcement without any address', () => {
     assert.deepEqual(addressesOf({}), []);
     assert.deepEqual(addressesOf(undefined), []);
+  });
+});
+
+describe('serviceTypeOf', () => {
+  it('reads the service type out of the instance name', () => {
+    assert.equal(
+      serviceTypeOf({ name: 'Living room._companion-link._tcp.local' }),
+      '_companion-link._tcp.local',
+    );
+  });
+
+  it('tolerates a name it cannot split', () => {
+    assert.equal(serviceTypeOf({ name: 'nodots' }), null);
+    assert.equal(serviceTypeOf({}), null);
+    assert.equal(serviceTypeOf(undefined), null);
   });
 });
 
@@ -98,7 +119,7 @@ describe('discoverAppleTvs', () => {
     const logs = logger.lines.info.join('\n');
     assert.match(
       logs,
-      /AirPlay announcement 1\/1: \{"name":"Living room\._airplay\._tcp\.local","host":"Living-Room\.local","addresses":\["192\.168\.1\.20","fe80::1"\],"ipv4":\["192\.168\.1\.20"\],"port":7000\}/,
+      /mDNS announcement 1\/1: \{"name":"Living room\._airplay\._tcp\.local","service":"_airplay\._tcp\.local","host":"Living-Room\.local","addresses":\["192\.168\.1\.20","fe80::1"\],"ipv4":\["192\.168\.1\.20"\],"port":7000\}/,
     );
     assert.doesNotMatch(logs, /deviceid/);
     assert.match(
@@ -174,7 +195,7 @@ describe('discoverAppleTvs', () => {
 
     assert.match(
       logger.lines.info.join('\n'),
-      /1 candidate address\(es\) did not answer pyatv: 192\.168\.1\.21/,
+      /1 candidate address\(es\) did not answer a direct query: 192\.168\.1\.21/,
     );
   });
 
@@ -189,6 +210,60 @@ describe('discoverAppleTvs', () => {
     const warnings = logger.lines.warn.join('\n');
     assert.match(warnings, /No candidate answered pyatv's direct mDNS query: 10\.20\.0\.40/);
     assert.match(warnings, /separate VLANs/);
+  });
+
+  it('hands the raw announcements to the worker along with the candidates', async () => {
+    // The worker cannot ask Gladys anything: the announcements are the only way
+    // it can rebuild a device that never answers a direct query.
+    const gladys = new FakeGladys();
+    gladys.scanNetworkResults = [
+      {
+        name: 'Living room._airplay._tcp.local',
+        host: 'atv.local',
+        addresses: ['192.168.1.20'],
+        port: 7000,
+        txt: ['deviceid=92:18:15:B6:6D:D2'],
+      },
+      {
+        name: 'Living room._companion-link._tcp.local',
+        host: 'atv.local',
+        addresses: ['192.168.1.20'],
+        port: 49152,
+        txt: ['rpMac=1'],
+      },
+    ];
+    const bridge = new FakeBridge({ scan: () => ({ devices: [descriptor()] }) });
+    const logger = fakeLogger();
+
+    await discoverAppleTvs({ gladys, bridge, config, logger });
+
+    assert.deepEqual(bridge.calls[0].params.announcements, gladys.scanNetworkResults);
+    // One address, two services: the candidate list stays deduplicated.
+    assert.deepEqual(bridge.calls[0].params.hosts, ['192.168.1.20']);
+    assert.match(
+      logger.lines.info.join('\n'),
+      /Gladys captured 2 mDNS announcement\(s\) across 2 service\(s\): _airplay\._tcp\.local, _companion-link\._tcp\.local/,
+    );
+  });
+
+  it('reports a device rebuilt from the announcements as unverified', async () => {
+    const gladys = new FakeGladys();
+    gladys.scanNetworkResults = [{ addresses: ['10.20.0.40'] }];
+    const bridge = new FakeBridge({
+      scan: () => ({ devices: [descriptor({ address: '10.20.0.40', source: 'announced' })] }),
+    });
+    const logger = fakeLogger();
+
+    const found = await discoverAppleTvs({ gladys, bridge, config, logger });
+
+    assert.equal(found.length, 1);
+    const logs = logger.lines.info.join('\n');
+    assert.match(logs, /1 device\(s\) were rebuilt from the announcements Gladys captured/);
+    assert.match(logs, /Living room \(10\.20\.0\.40\)/);
+    // The address never answered, so it must still be named as unverified
+    // rather than counted as a live confirmation.
+    assert.match(logs, /1 candidate address\(es\) did not answer a direct query: 10\.20\.0\.40/);
+    assert.match(logs, /"source":"announced"/);
   });
 
   it('does not call pyatv when nothing was found', async () => {

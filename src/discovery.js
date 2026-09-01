@@ -6,10 +6,20 @@ import { isIpv4 } from './config.js';
  * The integration container runs on a Docker bridge network, where multicast
  * never arrives: pyatv cannot browse mDNS by itself from in there. Gladys
  * solves this with mediated discovery — the core, which runs on the host
- * network, browses the service declared in the manifest and hands back the raw
+ * network, browses the services declared in the manifest and hands back the raw
  * announcements. This module turns those announcements into candidate IPv4
  * addresses, then asks pyatv to query each one directly (unicast mDNS, which
  * does cross the bridge) to obtain a real, complete device configuration.
+ *
+ * That direct query is the step that fails between VLANs: an Apple TV ignores a
+ * unicast mDNS query whose source is outside its own subnet, so the candidate
+ * stays silent and the device is never found — even though Gladys received its
+ * announcement and its address. Since Gladys 5.0.0 the core browses every
+ * declared service rather than only the first, so the announcements it returns
+ * now carry the full protocol set of the device (AirPlay, Companion, RAOP,
+ * MRP). That is the same raw material pyatv's own scanner consumes, so the
+ * announcements are handed to the worker as well: it rebuilds a configuration
+ * from them for the candidates that never answered.
  */
 
 /**
@@ -30,6 +40,24 @@ export function addressesOf(announcement) {
 }
 
 /**
+ * Read the DNS-SD service type an announcement belongs to.
+ *
+ * The core returns the full instance name (`Living Room._airplay._tcp.local`);
+ * everything after the first dot is the service type. It is what tells an
+ * AirPlay announcement from a Companion one now that several are declared.
+ *
+ * @param {object} announcement One entry of the mediated mDNS scan.
+ * @returns {string|null} The service type, or null when the name is unusable.
+ * @example
+ * serviceTypeOf({ name: 'TV._airplay._tcp.local' }); // '_airplay._tcp.local'
+ */
+export function serviceTypeOf(announcement) {
+  const name = String(announcement?.name || '');
+  const separator = name.indexOf('.');
+  return separator > 0 ? name.slice(separator + 1) : null;
+}
+
+/**
  * Produce a stable, compact description of one announcement for the logs.
  *
  * TXT records are deliberately omitted: they are verbose and can contain
@@ -44,6 +72,7 @@ function describeAnnouncement(announcement) {
     : [];
   return JSON.stringify({
     name: announcement?.name || null,
+    service: serviceTypeOf(announcement),
     host: announcement?.host || null,
     addresses,
     ipv4: addressesOf(announcement),
@@ -64,6 +93,7 @@ function describeAnswer(device) {
     model: device?.model || null,
     operating_system: device?.operating_system || null,
     is_apple_tv: Boolean(device?.is_apple_tv),
+    source: device?.source || 'direct',
   });
 }
 
@@ -162,10 +192,14 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
   let announcements = [];
   try {
     announcements = await gladys.scanNetwork('mdns', { timeoutSeconds: config.scanTimeout });
-    logger.info(`Gladys captured ${announcements.length} AirPlay announcement(s)`);
+    const services = [...new Set(announcements.map(serviceTypeOf).filter(Boolean))];
+    logger.info(
+      `Gladys captured ${announcements.length} mDNS announcement(s) across ` +
+        `${services.length} service(s): ${services.join(', ') || 'none'}`,
+    );
     announcements.forEach((announcement, index) => {
       logger.info(
-        `AirPlay announcement ${index + 1}/${announcements.length}: ${describeAnnouncement(announcement)}`,
+        `mDNS announcement ${index + 1}/${announcements.length}: ${describeAnnouncement(announcement)}`,
       );
     });
   } catch (error) {
@@ -225,7 +259,10 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
   logger.info(`Verifying ${hosts.length} candidate address(es) with pyatv`);
   const { devices = [] } = await bridge.request(
     'scan',
-    { hosts, timeout: config.scanTimeout },
+    // The announcements travel with the candidates: a device that does not
+    // answer the direct query is rebuilt from what Gladys already captured,
+    // which is the only thing that works across routed VLANs.
+    { hosts, announcements, timeout: config.scanTimeout },
     // pyatv queries the candidates concurrently, so the worst case is the scan
     // window itself plus the time to build the configurations.
     { timeout: (config.scanTimeout + 20) * 1000 },
@@ -235,17 +272,34 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
     logger.info(`pyatv response ${index + 1}/${devices.length}: ${describeAnswer(device)}`);
   });
 
-  const answeredHosts = new Set(devices.map((device) => device?.address).filter(Boolean));
+  // A device reconstructed from an announcement was never actually reached, so
+  // it is not proof the network works — the commands still have to cross. Only
+  // the direct answers count as verified.
+  const verified = devices.filter((device) => (device?.source || 'direct') === 'direct');
+  const rebuilt = devices.filter((device) => device?.source === 'announced');
+  const answeredHosts = new Set(verified.map((device) => device?.address).filter(Boolean));
   const unansweredHosts = hosts.filter((host) => !answeredHosts.has(host));
+
+  if (rebuilt.length > 0) {
+    logger.info(
+      `${rebuilt.length} device(s) were rebuilt from the announcements Gladys captured, ` +
+        'because they did not answer a direct query: ' +
+        `${rebuilt.map((device) => `${device.name} (${device.address})`).join(', ')}. ` +
+        'This is the expected path when Gladys and the Apple TV sit on different subnets.',
+    );
+  }
+
   if (devices.length === 0) {
     logger.warn(
-      `No candidate answered pyatv's direct mDNS query: ${unansweredHosts.join(', ')}. ` +
-        'On routed networks or separate VLANs, Apple devices normally ignore direct mDNS queries ' +
-        'whose source is outside their local subnet.',
+      `No candidate answered pyatv's direct mDNS query: ${unansweredHosts.join(', ')}, ` +
+        'and none could be rebuilt from the announcements either. On routed networks or ' +
+        'separate VLANs, Apple devices normally ignore direct mDNS queries whose source is ' +
+        'outside their local subnet; a rebuild needs the AirPlay and Companion announcements ' +
+        'to carry their TXT records through the relay.',
     );
   } else if (unansweredHosts.length > 0) {
     logger.info(
-      `${unansweredHosts.length} candidate address(es) did not answer pyatv: ${unansweredHosts.join(', ')}`,
+      `${unansweredHosts.length} candidate address(es) did not answer a direct query: ${unansweredHosts.join(', ')}`,
     );
   }
 

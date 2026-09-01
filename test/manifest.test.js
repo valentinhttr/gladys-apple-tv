@@ -26,13 +26,26 @@ describe('manifest', () => {
     );
   });
 
-  it('declares the mDNS capture the discovery relies on', () => {
-    // Only ONE entry per capture type is honoured by the core (it picks the
-    // first one matching the type), so declaring a second mDNS service would
-    // silently do nothing.
+  it('declares every mDNS service the discovery relies on', () => {
+    // Gladys browses every declared mdns entry since 5.0.0 (before that it kept
+    // only the first, which is why this used to be a single service). The whole
+    // set matters: rebuilding a configuration without a direct query needs the
+    // protocols the device actually speaks, and AirPlay alone cannot pair or
+    // drive the remote.
     const mdns = manifest.network_discovery.filter((entry) => entry.type === 'mdns');
-    assert.equal(mdns.length, 1);
-    assert.equal(mdns[0].service, '_airplay._tcp');
+    assert.deepEqual(
+      mdns.map((entry) => entry.service),
+      ['_airplay._tcp', '_companion-link._tcp', '_raop._tcp', '_mediaremotetv._tcp'],
+    );
+  });
+
+  it('stays within the capture entries the core accepts', () => {
+    // MAX_NETWORK_DISCOVERY_ENTRIES is 5 core side, and each entry is a line the
+    // user has to approve on the install screen.
+    assert.ok(
+      manifest.network_discovery.length <= 5,
+      `network_discovery must declare at most 5 entries, got ${manifest.network_discovery.length}`,
+    );
   });
 
   it('declares exactly the actions the code implements', () => {
@@ -87,11 +100,14 @@ describe('manifest', () => {
     }
   });
 
-  it('requires the Gladys version that resolves dynamic select options', () => {
-    // `source: "devices"` is only validated server side from 4.85.0
-    // (getDynamicOptions). On an older core every action above is rejected
-    // with "must be one of " and an empty list, whatever the user picks.
-    assert.equal(manifest.gladys_version, '>=4.85.0');
+  it('requires the Gladys version that browses every declared mDNS service', () => {
+    // Two constraints, and the newer one wins. `source: "devices"` is only
+    // validated server side from 4.85.0 (getDynamicOptions); below that every
+    // action is rejected with "must be one of " and an empty list. From 5.0.0
+    // the core browses all the declared mdns entries instead of the first one,
+    // which is what makes the Companion announcement reach the integration at
+    // all — without it a routed network can never be recovered.
+    assert.equal(manifest.gladys_version, '>=5.0.0');
   });
 
   it('gives every action enough time for its slowest step', () => {

@@ -9,7 +9,7 @@ uses. Nothing goes through Apple's servers, and no Apple ID is required.
 ## Requirements
 
 - An Apple TV (HD, 4K, any generation running tvOS 15 or later).
-- Gladys 4.85.0 or later.
+- Gladys 5.0.0 or later.
 - The Apple TV and your Gladys server on the **same network**. If they are on
   different VLANs or subnets, see "Different subnets" below.
 - Physical access to the television during pairing: Apple displays a code on the
@@ -133,11 +133,24 @@ candidate that did not answer. If the Apple TV disappears from that list when
 you unplug it but pyatv never answers, the mediated AirPlay capture works and
 the direct verification is what the network blocks.
 
-**Gladys and the Apple TV are on routed subnets or separate VLANs.** The Apple
-TV normally ignores the direct mDNS query pyatv sends when its source is outside
-the local subnet. Opening UDP 5353 or entering a manual address does not change
-that mDNS rule. Full support requires the relevant Bonjour services to be
-relayed by network infrastructure or mediated by Gladys.
+**Gladys and the Apple TV are on routed subnets or separate VLANs.** This is
+handled from version 1.2.0, provided your network relays the Bonjour
+announcements between the two subnets (an mDNS repeater or reflector on the
+router, which most prosumer firmwares offer). The Apple TV still ignores the
+direct query the integration sends, because its source is outside the local
+subnet — but Gladys now captures the AirPlay **and** Companion announcements
+from the host network, and the integration rebuilds the device from them
+instead of insisting on an answer.
+
+Two things to check when it still does not work. The relay must forward
+`_airplay._tcp` **and** `_companion-link._tcp`: AirPlay alone is not enough to
+pair or to drive the remote. And it must forward the address (A) records along
+with the service ones — the log says explicitly when an announcement arrived
+without an address, which is the usual sign of a partial relay.
+
+A device recovered this way is logged as rebuilt from the announcements. That
+means it was never actually reached during the scan: discovery and pairing work,
+but the commands themselves still have to reach the Apple TV.
 
 **You run Gladys in Docker on a Mac or on Windows.** Discovery cannot work
 there, and it is not a misconfiguration on your side. Docker Desktop, OrbStack

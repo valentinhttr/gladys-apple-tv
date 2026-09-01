@@ -72,6 +72,8 @@ export class AppleTvService {
   async _syncDevices() {
     const seen = new Set();
 
+    await this.refreshAnnouncements();
+
     for (const device of this.gladys.devices || []) {
       const identifier = readParam(device, PARAMS.IDENTIFIER);
       if (!identifier) {
@@ -100,6 +102,42 @@ export class AppleTvService {
     }
 
     await this.refreshConnectionStatus();
+  }
+
+  /**
+   * Hand the worker a fresh set of mediated mDNS announcements.
+   *
+   * A session is opened from the address stored on the Gladys device, and the
+   * worker confirms it with a direct query. Between VLANs that query goes
+   * unanswered, so the worker needs the announcements Gladys captured to rebuild
+   * the configuration instead — and sessions are opened at startup, long before
+   * the user runs a scan. Refreshing them here is what makes a reconnection work
+   * on a routed network.
+   *
+   * Failure is not fatal: on a flat network the direct query answers on its own,
+   * and this is only ever a fallback.
+   *
+   * @returns {Promise<void>} Resolves once the worker has been updated.
+   * @example
+   * await service.refreshAnnouncements();
+   */
+  async refreshAnnouncements() {
+    try {
+      const announcements = await this.gladys.scanNetwork('mdns', {
+        timeoutSeconds: this.config.scanTimeout,
+      });
+      const { count } = await this.bridge.request(
+        'announcements',
+        { announcements },
+        { timeout: 20_000 },
+      );
+      this.logger.info(
+        `${announcements.length} mDNS announcement(s) captured by Gladys, ` +
+          `${count} device configuration(s) available without a direct query`,
+      );
+    } catch (error) {
+      this.logger.debug(`Could not refresh the mediated announcements: ${error.message}`);
+    }
   }
 
   /**

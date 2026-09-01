@@ -6,17 +6,27 @@
     "en": "Control your Apple TV: power, remote, playback, volume and applications.",
     "fr": "Contrôlez votre Apple TV : alimentation, télécommande, lecture, volume et applications."
   },
-  "version": "1.1.0",
-  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.1.0",
+  "version": "1.2.0",
+  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.2.0",
   "cover_image": "https://raw.githubusercontent.com/valentinhttr/gladys-apple-tv/main/assets/cover.jpg",
-  "gladys_version": ">=4.85.0",
-  "transports": [
-    "local"
-  ],
+  "gladys_version": ">=5.0.0",
+  "transports": ["local"],
   "network_discovery": [
     {
       "type": "mdns",
       "service": "_airplay._tcp"
+    },
+    {
+      "type": "mdns",
+      "service": "_companion-link._tcp"
+    },
+    {
+      "type": "mdns",
+      "service": "_raop._tcp"
+    },
+    {
+      "type": "mdns",
+      "service": "_mediaremotetv._tcp"
     }
   ],
   "config_schema": [
@@ -61,8 +71,8 @@
         "fr": "Durée de la recherche (secondes)"
       },
       "description": {
-        "en": "How long Gladys listens for AirPlay announcements. Increase it on a busy or slow network.",
-        "fr": "Durée d'écoute des annonces AirPlay. À augmenter sur un réseau chargé ou lent."
+        "en": "How long Gladys listens for the Apple TV mDNS announcements. Increase it on a busy or slow network.",
+        "fr": "Durée d'écoute des annonces mDNS de l'Apple TV. À augmenter sur un réseau chargé ou lent."
       },
       "required": false,
       "default": 8,

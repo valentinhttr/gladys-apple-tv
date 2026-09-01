@@ -10,7 +10,7 @@ n'est nécessaire.
 ## Prérequis
 
 - Une Apple TV (HD, 4K, toute génération sous tvOS 15 ou plus récent).
-- Gladys 4.85.0 ou plus récent.
+- Gladys 5.0.0 ou plus récent.
 - L'Apple TV et votre serveur Gladys sur le **même réseau**. S'ils sont sur des
   VLAN ou sous-réseaux différents, voir « Réseaux séparés » plus bas.
 - Un accès physique au téléviseur pendant l'appairage : Apple affiche un code à
@@ -147,11 +147,25 @@ la débranche mais que pyatv ne répond jamais, la capture AirPlay médiée
 fonctionne et c'est la vérification directe que le réseau bloque.
 
 **Gladys et l'Apple TV sont sur des sous-réseaux routés ou VLANs distincts.**
-L'Apple TV ignore normalement la requête mDNS directe de pyatv lorsque sa source
-n'appartient pas au réseau local. Ouvrir UDP 5353 ou renseigner une adresse
-manuelle ne change pas cette règle mDNS. Le support complet nécessite que les
-services Bonjour utiles soient relayés par l'infrastructure réseau ou médiés
-par Gladys.
+C'est pris en charge depuis la version 1.2.0, à condition que votre réseau relaie
+les annonces Bonjour entre les deux sous-réseaux (un répéteur ou réflecteur mDNS
+sur le routeur, que proposent la plupart des firmwares un peu avancés). L'Apple
+TV ignore toujours la requête directe envoyée par l'intégration, puisque sa
+source n'appartient pas au réseau local — mais Gladys capture désormais les
+annonces AirPlay **et** Companion depuis le réseau de l'hôte, et l'intégration
+reconstruit l'appareil à partir de celles-ci au lieu d'exiger une réponse.
+
+Deux points à vérifier si cela ne suffit pas. Le relais doit transmettre
+`_airplay._tcp` **et** `_companion-link._tcp` : AirPlay seul ne permet ni
+l'appairage ni la télécommande. Et il doit transmettre les enregistrements
+d'adresse (A) en plus des enregistrements de service — le journal indique
+explicitement qu'une annonce est arrivée sans adresse, ce qui est le signe
+habituel d'un relais partiel.
+
+Un appareil récupéré ainsi est signalé dans le journal comme reconstruit à partir
+des annonces. Cela signifie qu'il n'a jamais été réellement joint pendant le
+scan : la découverte et l'appairage fonctionnent, mais les commandes elles-mêmes
+doivent encore atteindre l'Apple TV.
 
 **Vous faites tourner Gladys dans Docker sur un Mac ou sous Windows.** La
 découverte automatique ne peut pas fonctionner là, et ce n'est pas une erreur de

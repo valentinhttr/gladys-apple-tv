@@ -25,12 +25,16 @@ import logging
 import os
 import sys
 import traceback
-from typing import Any, Dict, List, Optional
+from ipaddress import IPv4Address
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 import pyatv
 from pyatv import exceptions as pyatv_exceptions
 from pyatv import interface
 from pyatv.const import FeatureName, FeatureState, PowerState, Protocol
+from pyatv.core import mdns
+from pyatv.core.scan import BaseScanner
+from pyatv.protocols import PROTOCOLS
 from pyatv.storage.file_storage import FileStorage
 
 LOGGER = logging.getLogger("pyatv-bridge")
@@ -134,6 +138,81 @@ RECONNECT_DELAYS = (2, 5, 10, 30, 60, 120, 300)
 # A device answering its unicast mDNS query is enough to build a config: no need
 # to wait for the full multicast window.
 DEFAULT_SCAN_TIMEOUT = 5
+
+
+class MediatedScanner(BaseScanner):
+    """Build pyatv configurations from announcements captured by the Gladys core.
+
+    pyatv normally learns about a device by browsing mDNS itself, which the
+    integration container cannot do (no multicast on a Docker bridge network),
+    and then by querying each candidate address directly. That direct query is
+    what fails across routed VLANs: an Apple TV ignores a unicast mDNS query
+    whose source sits outside its own subnet, so the candidate never answers and
+    no configuration is ever built.
+
+    The Gladys core runs on the host network and already receives the relayed
+    announcements. Since Gladys 5.0.0 it browses EVERY mDNS service declared in
+    the manifest, so what it hands back is the same set of SRV/TXT records
+    pyatv's own scanner would have parsed. Replaying them through pyatv's real
+    scan handlers produces a genuine configuration — identifier, model, pairing
+    requirements and all — without a single packet leaving the container.
+    """
+
+    def __init__(self, responses: List[mdns.Response]) -> None:
+        super().__init__()
+        self._responses = responses
+
+    async def process(self, timeout: int) -> None:
+        """Replay the captured announcements. Nothing is sent on the network."""
+        for response in self._responses:
+            self.handle_response(response)
+
+
+def _properties_of(announcement: Mapping[str, Any]) -> Dict[str, str]:
+    """Turn the core's `key=value` TXT strings into the mapping pyatv expects.
+
+    Keys are lowercased because that is what the scan handlers look up, and a
+    responder is free to announce `rpMac` or `rpmac`.
+    """
+    properties: Dict[str, str] = {}
+    for entry in announcement.get("txt") or []:
+        key, separator, value = str(entry).partition("=")
+        if separator:
+            properties[key.lower()] = value
+    return properties
+
+
+def responses_from_announcements(
+    announcements: Iterable[Mapping[str, Any]],
+) -> List[mdns.Response]:
+    """Group raw mediated announcements into one pyatv response per address.
+
+    An announcement is `{name, host, addresses, port, txt}`, where `name` is the
+    full instance name (`Living Room._airplay._tcp.local`) — its suffix is the
+    service type pyatv dispatches on. Grouping by address is what lets pyatv
+    merge the services of one device into a single configuration.
+    """
+    services_by_address: Dict[IPv4Address, List[mdns.Service]] = {}
+    for announcement in announcements or []:
+        name = str(announcement.get("name") or "")
+        short_name, separator, service_type = name.partition(".")
+        port = announcement.get("port")
+        if not separator or not isinstance(port, int) or port == 0:
+            continue
+        properties = _properties_of(announcement)
+        for raw_address in announcement.get("addresses") or []:
+            try:
+                address = IPv4Address(str(raw_address))
+            except ValueError:
+                # AAAA records come through the same field; pyatv is IPv4 only.
+                continue
+            services_by_address.setdefault(address, []).append(
+                mdns.Service(service_type, short_name, address, port, properties)
+            )
+    return [
+        mdns.Response(services=services, deep_sleep=False, model=None)
+        for services in services_by_address.values()
+    ]
 
 
 def _feature_state(atv: interface.AppleTV, feature: FeatureName) -> FeatureState:
@@ -537,6 +616,12 @@ class Bridge:
         self.sessions: Dict[str, DeviceSession] = {}
         self.pairing: Optional[PairingSession] = None
         self._tasks: set = set()
+        # Configurations built from the last mediated scan, keyed by every
+        # identifier and by address. They are what makes a connection possible
+        # when the device never answers a direct query (see MediatedScanner):
+        # `connect` and the pairing go through `scan_configs` too, and a scan
+        # only happens when the user asks for one.
+        self.announced: Dict[str, interface.BaseConfig] = {}
 
     # -- transport ----------------------------------------------------------
 
@@ -553,27 +638,98 @@ class Bridge:
 
     # -- pyatv helpers ------------------------------------------------------
 
+    async def remember_announcements(
+        self, announcements: Optional[List[Mapping[str, Any]]]
+    ) -> List[interface.BaseConfig]:
+        """Rebuild the mediated configurations from a fresh set of announcements.
+
+        Stored credentials are applied here, exactly as `pyatv.scan` does, so a
+        mediated configuration is indistinguishable from a scanned one — without
+        it every device would look unpaired.
+        """
+        if not announcements:
+            return []
+        scanner = MediatedScanner(responses_from_announcements(announcements))
+        for protocol, methods in PROTOCOLS.items():
+            scanner.add_service_info(protocol, methods.service_info)
+            for service_type, handler in methods.scan().items():
+                scanner.add_service(service_type, handler, methods.device_info)
+
+        configs = [config for config in (await scanner.discover(0)).values() if config.ready]
+        # Replaced rather than merged: a scan returns the whole current picture,
+        # so keeping older entries would let a device that changed address be
+        # reached at the previous one forever. An empty capture is left alone
+        # above, so a transient failure never wipes what still works.
+        announced: Dict[str, interface.BaseConfig] = {}
+        for config in configs:
+            if self.storage is not None:
+                config.apply(await self.storage.get_settings(config))
+            for key in [*config.all_identifiers, str(config.address)]:
+                announced[key] = config
+        self.announced = announced
+        LOGGER.debug(
+            "Built %d configuration(s) from %d mediated announcement(s)",
+            len(configs),
+            len(announcements),
+        )
+        return configs
+
+    def _announced_configs(
+        self, hosts: Optional[List[str]], identifier: Optional[str]
+    ) -> List[interface.BaseConfig]:
+        """The mediated configurations matching a scan request, without duplicates."""
+        keys = [identifier] if identifier else list(hosts or [])
+        configs: List[interface.BaseConfig] = []
+        for key in keys:
+            config = self.announced.get(key)
+            if config is not None and not any(
+                existing.identifier == config.identifier for existing in configs
+            ):
+                configs.append(config)
+        return configs
+
     async def scan_configs(
         self,
         hosts: Optional[List[str]] = None,
         identifier: Optional[str] = None,
         timeout: int = DEFAULT_SCAN_TIMEOUT,
+        announcements: Optional[List[Mapping[str, Any]]] = None,
     ) -> List[interface.BaseConfig]:
-        """Unicast scan.
+        """Unicast scan, completed by what the Gladys core announced.
 
         The integration container sits on a Docker bridge network, where
         multicast never arrives: mDNS browsing is done by the Gladys core on the
         host and the addresses it finds are verified here, one unicast query per
         candidate. `hosts=None` (multicast) only works outside Docker, during
         development.
+
+        That verification is also the step that fails across routed VLANs, where
+        an Apple TV ignores a query coming from another subnet. The direct answer
+        stays authoritative when it arrives — it proves the device is reachable
+        and reports its live state — and the mediated configuration takes over
+        for the candidates that stayed silent, which would otherwise be lost.
         """
-        return await pyatv.scan(
+        if announcements is not None:
+            await self.remember_announcements(announcements)
+        configs = await pyatv.scan(
             self.loop,
             timeout=timeout,
             hosts=hosts,
             identifier=identifier,
             storage=self.storage,
         )
+        answered = {config.identifier for config in configs}
+        answered.update(str(config.address) for config in configs)
+        for config in self._announced_configs(hosts, identifier):
+            if config.identifier in answered or str(config.address) in answered:
+                continue
+            LOGGER.debug(
+                "Using the mediated configuration for %s (%s): no direct answer",
+                config.name,
+                config.address,
+            )
+            configs.append(config)
+        return configs
 
     def _session(self, identifier: str) -> DeviceSession:
         session = self.sessions.get(identifier)
@@ -589,8 +745,33 @@ class Bridge:
     async def method_scan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         hosts = params.get("hosts") or None
         timeout = int(params.get("timeout") or DEFAULT_SCAN_TIMEOUT)
-        configs = await self.scan_configs(hosts=hosts, timeout=timeout)
-        return {"devices": [describe_config(config) for config in configs]}
+        configs = await self.scan_configs(
+            hosts=hosts, timeout=timeout, announcements=params.get("announcements")
+        )
+        # A mediated configuration is the very object held in the cache, so
+        # identity tells the two apart. Node reports it: a device rebuilt from an
+        # announcement was never actually reached, and saying so is the
+        # difference between "it works" and "it will fail at the first command".
+        mediated = {id(config) for config in self.announced.values()}
+        return {
+            "devices": [
+                dict(
+                    describe_config(config),
+                    source="announced" if id(config) in mediated else "direct",
+                )
+                for config in configs
+            ]
+        }
+
+    async def method_announcements(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Refresh the mediated configurations without running a scan.
+
+        Sessions are opened at startup, before the user has asked for anything,
+        so the addresses of a routed network have to be known by then or every
+        reconnection would fail until the next manual scan.
+        """
+        configs = await self.remember_announcements(params.get("announcements"))
+        return {"count": len(configs)}
 
     async def method_connect(self, params: Dict[str, Any]) -> Dict[str, Any]:
         identifier = params["identifier"]
@@ -922,6 +1103,76 @@ def _self_test() -> None:
     assert {name for _, name in calls} == COMPANION_FIRST_ACTIONS, (
         f"keys actually sent: {sorted(name for _, name in calls)}"
     )
+
+    _self_test_mediated_scan()
+
+
+def _self_test_mediated_scan() -> None:
+    """Check that announcements alone still build a usable configuration.
+
+    MediatedScanner is what makes a routed network work at all, and it is built
+    on pyatv internals no unit test can reach: `BaseScanner.handle_response`,
+    the `PROTOCOLS` scan handlers, and the shape of `mdns.Service`. If an
+    upgrade changes any of them, discovery keeps "working" on a flat network and
+    silently stops recovering anything across VLANs — the exact failure this
+    exists to fix. So it is asserted against real pyatv, on records shaped like
+    what a tvOS box actually announces.
+    """
+    announcements = [
+        {
+            "name": "Living Room._airplay._tcp.local",
+            "host": "Apple-TV.local",
+            "addresses": ["192.168.1.50"],
+            "port": 7000,
+            "txt": [
+                "deviceid=AA:BB:CC:DD:EE:FF",
+                "model=AppleTV14,1",
+                "osvers=17.4",
+                "flags=0x18644",
+                "pk=abcdef0123456789",
+                "acl=0",
+            ],
+        },
+        {
+            "name": "Living Room._companion-link._tcp.local",
+            "host": "Apple-TV.local",
+            "addresses": ["192.168.1.50"],
+            "port": 49152,
+            "txt": ["rpMac=1", "rpMd=AppleTV14,1", "rpFl=0x36782", "rpAD=1234abcd"],
+        },
+    ]
+
+    bridge = object.__new__(Bridge)
+    bridge.storage = None
+    bridge.announced = {}
+    configs = asyncio.run(bridge.remember_announcements(announcements))
+
+    assert len(configs) == 1, f"expected one device, got {len(configs)}"
+    config = configs[0]
+    assert config.identifier == "AA:BB:CC:DD:EE:FF", f"identifier: {config.identifier}"
+    assert config.name == "Living Room", f"name: {config.name}"
+    assert str(config.address) == "192.168.1.50", f"address: {config.address}"
+
+    described = describe_config(config)
+    assert described["is_apple_tv"], f"not recognised as an Apple TV: {described}"
+    # The two protocols the integration pairs have to be there and to be
+    # reported as needing a PIN: this is what the pairing action walks through,
+    # and Companion is the one the single-service scan could never deliver.
+    protocols = {service["protocol"] for service in described["services"]}
+    assert {"AirPlay", "Companion"} <= protocols, f"protocols: {sorted(protocols)}"
+    assert described["pairing_needed"] == ["AirPlay", "Companion"], (
+        f"pairing_needed: {described['pairing_needed']}"
+    )
+
+    # Looked up by identifier (how `connect` finds it) and by address (how a
+    # scan does), because those are the two entry points that must not fail.
+    assert bridge._announced_configs(None, config.identifier) == [config]  # noqa: SLF001
+    assert bridge._announced_configs(["192.168.1.50"], None) == [config]  # noqa: SLF001
+
+    # An announcement with no address record cannot be rebuilt: pyatv needs
+    # somewhere to connect. It must be dropped, not turned into a broken config.
+    bridge.announced = {}
+    assert asyncio.run(bridge.remember_announcements([dict(announcements[0], addresses=[])])) == []
 
 
 def main() -> int:

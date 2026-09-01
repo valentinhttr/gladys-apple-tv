@@ -91,7 +91,7 @@ drives a long-lived Python worker over a pipe.
 | [`index.js`](index.js)                               | Wiring: SDK handlers, lifecycle, shutdown                       |
 | [`src/apple-tv-service.js`](src/apple-tv-service.js) | One live session per device, command routing, state publication |
 | [`src/actions.js`](src/actions.js)                   | The configuration-screen buttons, pairing included              |
-| [`src/discovery.js`](src/discovery.js)               | Mediated mDNS scan, then unicast verification                   |
+| [`src/discovery.js`](src/discovery.js)               | Mediated mDNS scan, then unicast verification and rebuild       |
 | [`src/device-model.js`](src/device-model.js)         | Gladys device payload                                           |
 | [`src/features.js`](src/features.js)                 | Feature catalogue and the pyatv command behind each one         |
 | [`src/pyatv-bridge.js`](src/pyatv-bridge.js)         | Node side of the worker protocol, respawn included              |
@@ -107,16 +107,35 @@ every button feel broken and would give up real-time state entirely.
 ### Why mediated discovery
 
 The integration container runs on a Docker bridge network, where multicast never
-arrives — pyatv cannot browse mDNS from in there. The manifest declares an
-`_airplay._tcp` capture, the Gladys core browses it from the host network, and
-the integration verifies each candidate address with a **unicast** pyatv query,
-which does cross the bridge. Manual addresses cover cases where multicast is
-lost but the direct query still exits with an address on the Apple TV's local
-subnet. They cannot, by themselves, make that query work across routed VLANs:
-mDNS responders normally ignore a direct query from outside their local link.
+arrives — pyatv cannot browse mDNS from in there. The manifest declares the mDNS
+services an Apple TV announces, the Gladys core browses them from the host
+network, and the integration verifies each candidate address with a **unicast**
+pyatv query, which does cross the bridge. Manual addresses cover cases where
+multicast is lost but the direct query still exits with an address on the Apple
+TV's local subnet.
 
-Only the first `network_discovery` entry of a given type is honoured by the core,
-so exactly one mDNS service is declared — a second one would silently do nothing.
+That unicast verification is the step that fails across routed VLANs: an mDNS
+responder normally ignores a direct query from outside its local link, so the
+candidate stays silent and the device is never found — even when Gladys did
+receive its announcement and its address.
+
+Since **Gladys 5.0.0** the core browses _every_ declared `network_discovery`
+entry instead of only the first
+([#3002](https://github.com/GladysAssistant/Gladys/pull/3002)), so four services
+are declared — `_airplay._tcp`, `_companion-link._tcp`, `_raop._tcp` and
+`_mediaremotetv._tcp`. Together they carry the full protocol set of the device,
+which is the same raw material pyatv's own scanner consumes. The announcements
+are therefore handed to the worker alongside the candidate addresses, and
+`MediatedScanner` replays them through pyatv's real scan handlers to rebuild a
+genuine configuration for whatever did not answer — no packet leaves the
+container. A device obtained that way is reported as `source: "announced"` and
+logged as unverified: it was never actually reached, so it is not proof the
+commands will get through.
+
+The same fallback is what makes a _session_ possible on such a network, not just
+a scan: `connect` and the pairing both go through `scan_configs`. Sessions are
+opened at startup, before the user has run anything, so the announcements are
+refreshed at the top of every device sync.
 
 The mediated capture is only as good as the core's own view of the network, and
 that view is not always the LAN. Verified on a Mac running Gladys under
@@ -159,7 +178,9 @@ The Apple TV to pair is picked from a `select` field with `source: "devices"`,
 which the core fills with the integration's own devices — so nobody has to look
 up an IP address. Those dynamic options are only resolved server side from
 Gladys 4.85.0 (`getDynamicOptions`); on an older core such a field is rejected
-with `must be one of ` and an empty list, hence the `gladys_version` floor. The
+with `must be one of ` and an empty list. The `gladys_version` floor is 5.0.0
+rather than 4.85.0 because of the multi-service mDNS scan above, which is the
+stricter of the two requirements. The
 price is that a device must be added from the Discovery tab before it can be
 paired, which is the order the manifest walks the user through anyway.
 

@@ -67,6 +67,48 @@ describe('syncDevices', () => {
     assert.equal(service.devices.get(IDENTIFIER).connected, true);
   });
 
+  it('gives the worker the announcements before opening any session', async () => {
+    // Sessions are opened at startup, long before the user runs a scan, and on a
+    // routed network the direct query the worker makes goes unanswered. Without
+    // this refresh the worker has nothing to fall back on and every reconnection
+    // fails until someone scans by hand.
+    const { gladys, bridge, service } = makeService({
+      gladysOptions: { devices: [gladysDevice()] },
+      handlers: { connect: () => ({ capabilities: {}, state: {} }), announcements: { count: 1 } },
+    });
+    gladys.scanNetworkResults = [
+      { name: 'Living room._companion-link._tcp.local', addresses: ['192.168.1.20'], port: 49152 },
+    ];
+
+    await service.syncDevices();
+
+    const methods = bridge.calls.map((call) => call.method);
+    assert.ok(
+      methods.indexOf('announcements') >= 0 &&
+        methods.indexOf('announcements') < methods.indexOf('connect'),
+      `announcements must be sent before connect, got ${methods.join(', ')}`,
+    );
+    assert.deepEqual(
+      bridge.calls.find((call) => call.method === 'announcements').params.announcements,
+      gladys.scanNetworkResults,
+    );
+  });
+
+  it('still opens the sessions when the announcements cannot be refreshed', async () => {
+    // On a flat network the direct query answers on its own: a capture failure
+    // must never be what stops a device from connecting.
+    const { gladys, bridge, service } = makeService({
+      gladysOptions: { devices: [gladysDevice()] },
+      handlers: { connect: () => ({ capabilities: {}, state: {} }) },
+    });
+    gladys.scanNetworkError = new Error('capture unavailable');
+
+    await service.syncDevices();
+
+    assert.ok(bridge.calls.some((call) => call.method === 'connect'));
+    assert.equal(service.devices.get(IDENTIFIER).connected, true);
+  });
+
   it('closes the session of a device deleted in Gladys', async () => {
     const { gladys, bridge, service } = makeService({
       gladysOptions: { devices: [gladysDevice()] },
