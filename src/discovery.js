@@ -221,7 +221,9 @@ export async function discoverAppleTvs({ gladys, bridge, config, logger, extraHo
       }
     }
   };
-  addSource(announced, 'AirPlay announcement');
+  // Not "AirPlay announcement": since Gladys 5.0.0 an address can just as well
+  // come from the Companion or RAOP announcement of the same device.
+  addSource(announced, 'mDNS announcement');
   addSource(config.manualHosts, 'manual configuration');
   addSource(known, 'known Gladys device');
   const hosts = [...sourcesByHost.keys()];

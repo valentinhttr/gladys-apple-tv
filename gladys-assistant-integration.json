@@ -10,9 +10,7 @@
   "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.2.0",
   "cover_image": "https://raw.githubusercontent.com/valentinhttr/gladys-apple-tv/main/assets/cover.jpg",
   "gladys_version": ">=5.0.0",
-  "transports": [
-    "local"
-  ],
+  "transports": ["local"],
   "network_discovery": [
     {
       "type": "mdns",
@@ -89,8 +87,8 @@
         "fr": "Adresses IPv4 manuelles"
       },
       "description": {
-        "en": "Optional, comma separated. Useful when automatic announcements do not reach Gladys but direct traffic still exits on the Apple TV's local subnet, as with some desktop Docker setups. An address alone does not enable discovery across routed VLANs.",
-        "fr": "Facultatif, séparées par des virgules. Utile si les annonces automatiques n'atteignent pas Gladys mais que le trafic direct sort toujours sur le réseau local de l'Apple TV, comme avec certaines installations Docker de bureau. Une adresse seule ne permet pas la découverte entre VLANs routés."
+        "en": "Optional, comma separated. Added to the addresses Gladys announces, never in place of them: this field cannot be used to restrict the scan to one Apple TV. Useful when automatic announcements do not reach Gladys but direct traffic still exits on the Apple TV's local subnet, as with some desktop Docker setups. An address alone does not enable discovery across routed VLANs.",
+        "fr": "Facultatif, séparées par des virgules. S'ajoutent aux adresses annoncées à Gladys, jamais à leur place : ce champ ne permet pas de limiter la recherche à une seule Apple TV. Utile si les annonces automatiques n'atteignent pas Gladys mais que le trafic direct sort toujours sur le réseau local de l'Apple TV, comme avec certaines installations Docker de bureau. Une adresse seule ne permet pas la découverte entre VLANs routés."
       },
       "placeholder": {
         "en": "192.168.1.20, 192.168.1.21",

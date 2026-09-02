@@ -10,8 +10,9 @@ uses. Nothing goes through Apple's servers, and no Apple ID is required.
 
 - An Apple TV (HD, 4K, any generation running tvOS 15 or later).
 - Gladys 5.0.0 or later.
-- The Apple TV and your Gladys server on the **same network**. If they are on
-  different VLANs or subnets, see "Different subnets" below.
+- The Apple TV and your Gladys server on the **same network**. Routed VLANs or
+  subnets work too, provided an mDNS relay forwards the announcements: see
+  troubleshooting.
 - Physical access to the television during pairing: Apple displays a code on the
   screen that you have to read and type into Gladys.
 
@@ -95,13 +96,13 @@ have to choose between them.
 
 ## Configuration
 
-| Setting                     | What it does                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Discovery duration          | How long Gladys listens for AirPlay announcements. Increase it on a busy or slow network.                                 |
-| Manual IPv4 addresses       | Adds known targets when announcements do not reach Gladys. Does not by itself enable discovery across routed VLANs.       |
-| Refresh interval            | How often the integration reconciles what the Apple TV does not push by itself, typically the power state on some models. |
-| Application shortcuts       | Whether to expose one button per installed application.                                                                   |
-| Maximum number of shortcuts | An Apple TV can have a hundred applications; this bound keeps the device readable.                                        |
+| Setting                     | What it does                                                                                                                                             |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discovery duration          | How long Gladys listens for AirPlay announcements. Increase it on a busy or slow network.                                                                |
+| Manual IPv4 addresses       | Adds known targets when announcements do not reach Gladys; it never restricts the scan to them. Does not by itself enable discovery across routed VLANs. |
+| Refresh interval            | How often the integration reconciles what the Apple TV does not push by itself, typically the power state on some models.                                |
+| Application shortcuts       | Whether to expose one button per installed application.                                                                                                  |
+| Maximum number of shortcuts | An Apple TV can have a hundred applications; this bound keeps the device readable.                                                                       |
 
 ## Other actions
 
@@ -182,9 +183,17 @@ a static lease on your router avoids the problem entirely.
 level — a common case with HDMI-CEC. Use the volume up and volume down buttons
 instead.
 
-**Different subnets.** mDNS announcements do not cross subnets. Fill in the IPv4
-address of each Apple TV in "Manual IPv4 addresses"; the integration queries them
-directly, which works as long as the traffic is routed.
+**The scan lists devices that are not Apple TVs.** It should not: a HomePod, an
+AirPort Express or an AirPlay speaker is recognised on its hardware model and
+left out, even though a HomePod runs tvOS and speaks the same protocols. If one
+still shows up, its model is missing from the announcement — the log line
+`pyatv response n/n` gives the model the integration read, which is what to
+report in a bug.
+
+**"Manual IPv4 addresses" does not restrict the scan.** The addresses are added
+to the ones Gladys captured, they never replace them. The field exists to reach
+a device whose announcements do not arrive, not to pick which Apple TV to keep;
+the `Candidate address` log lines name every source of every address.
 
 ## Privacy and storage
 

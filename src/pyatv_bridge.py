@@ -31,7 +31,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 import pyatv
 from pyatv import exceptions as pyatv_exceptions
 from pyatv import interface
-from pyatv.const import FeatureName, FeatureState, PowerState, Protocol
+from pyatv.const import DeviceModel, FeatureName, FeatureState, PowerState, Protocol
 from pyatv.core import mdns
 from pyatv.core.scan import BaseScanner
 from pyatv.protocols import PROTOCOLS
@@ -130,6 +130,23 @@ CAPABILITY_FEATURES = {
 # remote, power and apps.
 PAIRABLE_PROTOCOLS = ("AirPlay", "Companion")
 
+# The models this integration controls. A HomePod runs tvOS and speaks the very
+# same AirPlay and Companion protocols, so the operating system tells the two
+# apart in no way at all — pyatv itself derives `operating_system` FROM the
+# model, and answers TvOS for a HomePod. Matching on the hardware model is the
+# only honest test, and Apple publishes it in the AirPlay TXT record.
+APPLE_TV_MODELS = frozenset(
+    {
+        DeviceModel.AppleTVGen1,
+        DeviceModel.Gen2,
+        DeviceModel.Gen3,
+        DeviceModel.Gen4,
+        DeviceModel.Gen4K,
+        DeviceModel.AppleTV4KGen2,
+        DeviceModel.AppleTV4KGen3,
+    }
+)
+
 # Reconnection backoff, in seconds. An Apple TV unplugged for the evening must
 # not be retried in a tight loop, and one that just rebooted must come back
 # quickly.
@@ -226,6 +243,31 @@ def _enum_name(value: Any) -> Optional[str]:
     return value.name.lower() if value is not None and hasattr(value, "name") else None
 
 
+def is_apple_tv(info: interface.DeviceInfo) -> bool:
+    """Tell an Apple TV from the other Apple devices an AirPlay scan finds.
+
+    A scan also returns HomePods, AirPort Express, Macs and third-party AirPlay
+    speakers. None of them can be driven by this integration, and a HomePod is
+    the trap: it runs tvOS and announces both AirPlay and Companion, so it looks
+    exactly like an Apple TV to everything except its model.
+
+    pyatv resolves the model of the hardware it knows; anything newer than the
+    installed pyatv falls back to the raw identifier, which Apple has always
+    prefixed with `AppleTV` (`AppleTV14,1`) — HomePods use `AudioAccessory`.
+    So an Apple TV released after this pyatv is still recognised.
+
+    :param info: Device information of a scanned configuration.
+    :returns: True when the device is an Apple TV.
+    """
+    if info.model in APPLE_TV_MODELS:
+        return True
+    if info.model != DeviceModel.Unknown:
+        # A model pyatv resolved to something else (HomePod, AirPort Express,
+        # the Music app) is a definitive no, whatever the raw string says.
+        return False
+    return (info.raw_model or "").startswith("AppleTV")
+
+
 def describe_config(config: interface.BaseConfig) -> Dict[str, Any]:
     """Serialize a scanned pyatv configuration for the Node side."""
     info = config.device_info
@@ -253,11 +295,9 @@ def describe_config(config: interface.BaseConfig) -> Dict[str, Any]:
         "version": info.version,
         "mac": info.mac,
         "services": services,
-        # An AirPlay scan also returns Macs, AirPlay speakers and smart TVs.
-        # Only tvOS boxes are what this integration controls, and the OS is
-        # readable before any pairing.
-        "is_apple_tv": _enum_name(info.operating_system) == "tvos"
-        or raw_model.startswith("AppleTV"),
+        # Readable before any pairing, which is what lets the scan filter the
+        # devices it cannot control before offering them to the user.
+        "is_apple_tv": is_apple_tv(info),
         # A protocol we pair whose pairing is mandatory and that has no stored
         # credentials yet is exactly what the pairing action has to walk the
         # user through, in this order.
@@ -1104,7 +1144,38 @@ def _self_test() -> None:
         f"keys actually sent: {sorted(name for _, name in calls)}"
     )
 
+    _self_test_model_filter()
     _self_test_mediated_scan()
+
+
+def _self_test_model_filter() -> None:
+    """Check the Apple TV filter against pyatv's own model table.
+
+    The scan offers the user everything it calls an Apple TV, so a device that
+    slips through here is one they can add and never control. Both branches are
+    covered: the models pyatv resolves, and the raw fallback for hardware newer
+    than the installed pyatv. That pyatv maps `AudioAccessory5,1` onto
+    HomePodMini in the first place is proven end to end by the mediated scan.
+    """
+    for model, raw_model, expected in [
+        (DeviceModel.AppleTV4KGen3, "AppleTV14,1", True),
+        (DeviceModel.Gen2, "AppleTV2,1", True),  # legacy software, not tvOS at all
+        (DeviceModel.HomePodMini, "AudioAccessory5,1", False),  # runs tvOS
+        (DeviceModel.HomePodGen2, "AudioAccessory6,1", False),
+        (DeviceModel.AirPortExpressGen2, "AirPort10,115", False),
+        (DeviceModel.Unknown, "AppleTV99,1", True),  # released after this pyatv
+        (DeviceModel.Unknown, "MacBookPro18,3", False),
+        (DeviceModel.Unknown, "", False),
+    ]:
+        info = interface.DeviceInfo(
+            {
+                interface.DeviceInfo.MODEL: model,
+                interface.DeviceInfo.RAW_MODEL: raw_model,
+            }
+        )
+        assert is_apple_tv(info) is expected, (
+            f"{raw_model or '<no model>'}: is_apple_tv={is_apple_tv(info)}, expected {expected}"
+        )
 
 
 def _self_test_mediated_scan() -> None:
@@ -1140,6 +1211,31 @@ def _self_test_mediated_scan() -> None:
             "port": 49152,
             "txt": ["rpMac=1", "rpMd=AppleTV14,1", "rpFl=0x36782", "rpAD=1234abcd"],
         },
+        # A HomePod mini, announcing the very same two services from the same
+        # network. It must survive the scan as a device and be rejected on its
+        # model alone: it runs tvOS, so anything reading the operating system
+        # would offer it to the user as an Apple TV it can never control.
+        {
+            "name": "Kitchen._airplay._tcp.local",
+            "host": "HomePod.local",
+            "addresses": ["192.168.1.51"],
+            "port": 7000,
+            "txt": [
+                "deviceid=11:22:33:44:55:66",
+                "model=AudioAccessory5,1",
+                "osvers=17.4",
+                "flags=0x18644",
+                "pk=fedcba9876543210",
+                "acl=0",
+            ],
+        },
+        {
+            "name": "Kitchen._companion-link._tcp.local",
+            "host": "HomePod.local",
+            "addresses": ["192.168.1.51"],
+            "port": 49152,
+            "txt": ["rpMac=1", "rpMd=AudioAccessory5,1", "rpFl=0x36782", "rpAD=5678efab"],
+        },
     ]
 
     bridge = object.__new__(Bridge)
@@ -1147,8 +1243,17 @@ def _self_test_mediated_scan() -> None:
     bridge.announced = {}
     configs = asyncio.run(bridge.remember_announcements(announcements))
 
-    assert len(configs) == 1, f"expected one device, got {len(configs)}"
-    config = configs[0]
+    assert len(configs) == 2, f"expected two devices, got {len(configs)}"
+    by_address = {str(entry.address): entry for entry in configs}
+    assert set(by_address) == {"192.168.1.50", "192.168.1.51"}, f"addresses: {sorted(by_address)}"
+
+    homepod = describe_config(by_address["192.168.1.51"])
+    assert not homepod["is_apple_tv"], f"a HomePod was taken for an Apple TV: {homepod}"
+    # pyatv resolving the model is what the rejection rests on, so a change in
+    # its lookup table has to fail here rather than silently pass the HomePod.
+    assert homepod["model"] == "HomePod Mini", f"model: {homepod['model']}"
+
+    config = by_address["192.168.1.50"]
     assert config.identifier == "AA:BB:CC:DD:EE:FF", f"identifier: {config.identifier}"
     assert config.name == "Living Room", f"name: {config.name}"
     assert str(config.address) == "192.168.1.50", f"address: {config.address}"

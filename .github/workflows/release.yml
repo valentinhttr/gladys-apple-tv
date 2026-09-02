@@ -74,6 +74,11 @@ jobs:
             gladys-assistant-integration.json > "$tmp"
           mv "$tmp" gladys-assistant-integration.json
 
+          # jq reprints the whole document in its own style, which is not
+          # Prettier's: the release commit would otherwise leave main failing
+          # `format:check` until someone reformatted it by hand.
+          npx prettier --write gladys-assistant-integration.json
+
           echo "version=${new_version}" >> "$GITHUB_OUTPUT"
 
       - name: Commit, tag and push

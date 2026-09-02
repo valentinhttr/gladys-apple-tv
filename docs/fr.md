@@ -11,8 +11,9 @@ n'est nécessaire.
 
 - Une Apple TV (HD, 4K, toute génération sous tvOS 15 ou plus récent).
 - Gladys 5.0.0 ou plus récent.
-- L'Apple TV et votre serveur Gladys sur le **même réseau**. S'ils sont sur des
-  VLAN ou sous-réseaux différents, voir « Réseaux séparés » plus bas.
+- L'Apple TV et votre serveur Gladys sur le **même réseau**. Des VLAN ou
+  sous-réseaux routés fonctionnent aussi, à condition qu'un relais mDNS transmette
+  les annonces : voir le dépannage.
 - Un accès physique au téléviseur pendant l'appairage : Apple affiche un code à
   l'écran, que vous devez lire et saisir dans Gladys.
 
@@ -105,13 +106,13 @@ utiliser, vous n'avez donc jamais à choisir.
 
 ## Configuration
 
-| Réglage                        | Effet                                                                                                                                |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Durée de la recherche          | Durée d'écoute des annonces AirPlay. À augmenter sur un réseau chargé ou lent.                                                       |
-| Adresses IPv4 manuelles        | Ajoute des cibles connues si les annonces n'atteignent pas Gladys. Ne permet pas, seule, la découverte entre VLANs routés.           |
-| Intervalle de rafraîchissement | Fréquence de réconciliation de ce que l'Apple TV ne pousse pas d'elle-même, généralement l'état d'alimentation sur certains modèles. |
-| Raccourcis d'applications      | Exposer ou non un bouton par application installée.                                                                                  |
-| Nombre maximum de raccourcis   | Une Apple TV peut compter une centaine d'applications ; cette limite garde l'appareil lisible.                                       |
+| Réglage                        | Effet                                                                                                                                                                  |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Durée de la recherche          | Durée d'écoute des annonces AirPlay. À augmenter sur un réseau chargé ou lent.                                                                                         |
+| Adresses IPv4 manuelles        | Ajoute des cibles connues si les annonces n'atteignent pas Gladys ; ne limite jamais la recherche à celles-ci. Ne permet pas, seule, la découverte entre VLANs routés. |
+| Intervalle de rafraîchissement | Fréquence de réconciliation de ce que l'Apple TV ne pousse pas d'elle-même, généralement l'état d'alimentation sur certains modèles.                                   |
+| Raccourcis d'applications      | Exposer ou non un bouton par application installée.                                                                                                                    |
+| Nombre maximum de raccourcis   | Une Apple TV peut compter une centaine d'applications ; cette limite garde l'appareil lisible.                                                                         |
 
 ## Autres actions
 
@@ -197,10 +198,18 @@ utilisée par l'intégration ; un bail statique sur votre routeur évite le prob
 **Il n'y a pas de curseur de volume.** Votre installation n'expose pas de niveau
 de volume lisible — cas fréquent en HDMI-CEC. Utilisez les boutons volume +/−.
 
-**Réseaux séparés.** Les annonces mDNS ne traversent pas les sous-réseaux.
-Renseignez l'adresse IPv4 de chaque Apple TV dans « Adresses IPv4 manuelles » :
-l'intégration les interroge directement, ce qui fonctionne tant que le trafic est
-routé.
+**La recherche liste des appareils qui ne sont pas des Apple TV.** Elle ne
+devrait pas : un HomePod, une AirPort Express ou une enceinte AirPlay est
+reconnu à son modèle matériel et écarté, alors même qu'un HomePod tourne sous
+tvOS et parle les mêmes protocoles. S'il en apparaît malgré tout un, c'est que
+son modèle manque à l'annonce — la ligne de journal `pyatv response n/n` indique
+le modèle lu par l'intégration, à joindre au rapport de bug.
+
+**« Adresses IPv4 manuelles » ne restreint pas la recherche.** Ces adresses
+s'ajoutent à celles que Gladys a captées, elles ne les remplacent jamais. Le
+champ sert à joindre un appareil dont les annonces n'arrivent pas, pas à choisir
+quelle Apple TV garder ; les lignes `Candidate address` du journal indiquent
+l'origine de chaque adresse.
 
 ## Confidentialité et stockage
 

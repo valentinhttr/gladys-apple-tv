@@ -50,7 +50,7 @@ describe('candidateHosts', () => {
   });
 
   it('rescues an announcement whose host was resolved by another one', () => {
-    // The AirPlay announcement of a device can arrive without its address
+    // The mDNS announcement of a device can arrive without its address
     // record while another service of the same host carries it.
     const { hosts, unresolved } = candidateHosts([
       { name: 'Salon._raop._tcp.local', host: 'atv.local', addresses: ['192.168.1.20'] },
@@ -124,7 +124,7 @@ describe('discoverAppleTvs', () => {
     assert.doesNotMatch(logs, /deviceid/);
     assert.match(
       logs,
-      /Candidate address 1\/1: \{"address":"192\.168\.1\.20","sources":\["AirPlay announcement"\]\}/,
+      /Candidate address 1\/1: \{"address":"192\.168\.1\.20","sources":\["mDNS announcement"\]\}/,
     );
     assert.match(logs, /pyatv response 1\/1: \{"name":"Living room","address":"192\.168\.1\.20"/);
   });
@@ -181,7 +181,7 @@ describe('discoverAppleTvs', () => {
 
     assert.match(
       logger.lines.info.join('\n'),
-      /"sources":\["AirPlay announcement","manual configuration","known Gladys device"\]/,
+      /"sources":\["mDNS announcement","manual configuration","known Gladys device"\]/,
     );
   });
 
