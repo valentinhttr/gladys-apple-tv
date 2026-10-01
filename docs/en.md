@@ -6,10 +6,28 @@ network, using [pyatv](https://pyatv.dev) — the reference implementation of
 Apple's AirPlay and Companion protocols, and the same library Home Assistant
 uses. Nothing goes through Apple's servers, and no Apple ID is required.
 
+## Dashboard widgets
+
+In the dashboard editor, add a widget from the Apple TV integration and choose
+your device:
+
+- **Apple TV — Playback**: current title and application, playback state,
+  play/pause, skip backward, skip forward and standby, depending on device
+  capabilities. In standby, **Turn on** replaces the playback controls.
+- **Apple TV — Favorites**: enter up to four installed application names in the
+  widget settings, such as `Netflix` or `Plex`. Names are case-insensitive; leave
+  unused fields empty. Without favorites, the widget shows available names.
+  Enable application shortcuts in the integration settings. A button opens the
+  application; it does not automatically start a movie.
+
+Cards refresh every ten seconds and after a command. Opening the dashboard does
+not wake the Apple TV. Metadata depends on the active application; artwork is
+not displayed. Add multiple widget instances for multiple Apple TVs.
+
 ## Requirements
 
 - An Apple TV (HD, 4K, any generation running tvOS 15 or later).
-- Gladys 5.0.0 or later.
+- Gladys 5.1.0 or later.
 - The Apple TV and your Gladys server on the **same network**. Routed VLANs or
   subnets work too, provided an mDNS relay forwards the announcements: see
   troubleshooting.

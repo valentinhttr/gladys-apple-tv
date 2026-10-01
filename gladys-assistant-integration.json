@@ -9,7 +9,7 @@
   "version": "1.2.1",
   "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.2.1",
   "cover_image": "https://raw.githubusercontent.com/valentinhttr/gladys-apple-tv/main/assets/cover.jpg",
-  "gladys_version": ">=5.0.0",
+  "gladys_version": ">=5.1.0",
   "transports": ["local"],
   "network_discovery": [
     {
@@ -401,6 +401,106 @@
           "required": true
         }
       ]
+    }
+  ],
+  "widgets": [
+    {
+      "key": "playback",
+      "label": {
+        "en": "Apple TV — Playback",
+        "fr": "Apple TV — Lecture"
+      },
+      "description": {
+        "en": "Now playing and playback controls.",
+        "fr": "Média en cours et commandes de lecture."
+      },
+      "icon": "tv",
+      "settings": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "required": true,
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          }
+        }
+      ],
+      "action_timeout_seconds": 60
+    },
+    {
+      "key": "favorites",
+      "label": {
+        "en": "Apple TV — Favorites",
+        "fr": "Apple TV — Favoris"
+      },
+      "description": {
+        "en": "Open up to four favorite applications.",
+        "fr": "Ouvrez jusqu’à quatre applications favorites."
+      },
+      "icon": "grid",
+      "settings": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "required": true,
+          "label": {
+            "en": "Apple TV",
+            "fr": "Apple TV"
+          }
+        },
+        {
+          "key": "favorite_1",
+          "type": "string",
+          "label": {
+            "en": "Application 1",
+            "fr": "Application 1"
+          },
+          "description": {
+            "en": "Installed application name, e.g. Netflix. Leave empty to hide.",
+            "fr": "Nom de l’application installée, par exemple Netflix. Laissez vide pour masquer."
+          }
+        },
+        {
+          "key": "favorite_2",
+          "type": "string",
+          "label": {
+            "en": "Application 2",
+            "fr": "Application 2"
+          },
+          "description": {
+            "en": "Installed application name, e.g. Netflix. Leave empty to hide.",
+            "fr": "Nom de l’application installée, par exemple Netflix. Laissez vide pour masquer."
+          }
+        },
+        {
+          "key": "favorite_3",
+          "type": "string",
+          "label": {
+            "en": "Application 3",
+            "fr": "Application 3"
+          },
+          "description": {
+            "en": "Installed application name, e.g. Netflix. Leave empty to hide.",
+            "fr": "Nom de l’application installée, par exemple Netflix. Laissez vide pour masquer."
+          }
+        },
+        {
+          "key": "favorite_4",
+          "type": "string",
+          "label": {
+            "en": "Application 4",
+            "fr": "Application 4"
+          },
+          "description": {
+            "en": "Installed application name, e.g. Netflix. Leave empty to hide.",
+            "fr": "Nom de l’application installée, par exemple Netflix. Laissez vide pour masquer."
+          }
+        }
+      ],
+      "action_timeout_seconds": 60
     }
   ]
 }

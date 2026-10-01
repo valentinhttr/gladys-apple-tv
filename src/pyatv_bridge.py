@@ -118,6 +118,10 @@ COMPANION_FIRST_ACTIONS = frozenset(
 # Apple TV driven over HDMI-CEC has no readable volume level, publishing a
 # volume slider for it would only produce a control that never works.
 CAPABILITY_FEATURES = {
+    "play": FeatureName.Play,
+    "pause": FeatureName.Pause,
+    "skip_backward": FeatureName.SkipBackward,
+    "skip_forward": FeatureName.SkipForward,
     "power": FeatureName.PowerState,
     "turn_on": FeatureName.TurnOn,
     "turn_off": FeatureName.TurnOff,
@@ -538,6 +542,8 @@ class DeviceSession(
             LOGGER.debug("Could not read what is playing on %s: %s", self.identifier, err)
 
         if self.capabilities.get("app"):
+            state["app_name"] = None
+            state["app_identifier"] = None
             app = atv.metadata.app
             if app is not None:
                 state["app_name"] = app.name
