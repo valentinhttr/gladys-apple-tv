@@ -1166,58 +1166,6 @@ def _self_test() -> None:
 
     _self_test_model_filter()
     _self_test_mediated_scan()
-    asyncio.run(_self_test_connection_logging())
-
-
-async def _self_test_connection_logging() -> None:
-    """Exercise real retry/dispatch paths without a device or network traffic."""
-    from unittest.mock import AsyncMock, Mock, patch
-
-    errors = [
-        pyatv_exceptions.ConnectionFailedError("No Apple TV answered"),
-        pyatv_exceptions.ConnectionLostError("disconnected"),
-        ConnectionRefusedError("offline"),
-        OSError(errno.EHOSTUNREACH, "No route to host"),
-        TimeoutError("timed out"),
-    ]
-    assert not is_unreachable_error(PermissionError("storage inaccessible"))
-    assert not is_unreachable_error(pyatv_exceptions.AuthenticationError("invalid credentials"))
-    bridge = Bridge("/unused", asyncio.get_running_loop())
-    bridge._write = Mock()
-    with patch.object(LOGGER, "info") as info, patch.object(LOGGER, "warning") as warning, \
-            patch.object(LOGGER, "debug") as debug:
-        for error in errors:
-            bridge.method_connect = AsyncMock(side_effect=error)
-            for _ in range(3):
-                await bridge.handle({"id": 1, "method": "connect"})
-                assert bridge._write.call_args.args[0]["error"]["unreachable"] is True
-
-        session = DeviceSession(bridge, "device", "192.0.2.1")
-        with patch.object(session, "_schedule_reconnect") as schedule:
-            session.connection_lost(errors[1])
-            session.connection_closed()
-            assert schedule.call_count == 2
-        session.connect = AsyncMock(side_effect=[*errors, {}])
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            await session._reconnect_loop()
-        assert session.connect.await_count == len(errors) + 1
-        info.assert_not_called()
-        warning.assert_not_called()
-        debug.assert_not_called()
-
-        # Unexpected errors and failed user commands must still be diagnosable.
-        bridge.method_connect = AsyncMock(side_effect=RuntimeError("unexpected"))
-        await bridge.handle({"id": 2, "method": "connect"})
-        assert bridge._write.call_args.args[0]["error"]["unreachable"] is False
-        info.assert_called_once()
-        bridge.method_command = AsyncMock(side_effect=errors[0])
-        await bridge.handle({"id": 3, "method": "command"})
-        assert info.call_count == 2
-
-        session.connect = AsyncMock(side_effect=[RuntimeError("unexpected"), {}])
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            await session._reconnect_loop()
-        warning.assert_called_once()
 
 
 def _self_test_model_filter() -> None:

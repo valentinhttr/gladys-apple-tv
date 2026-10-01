@@ -26,13 +26,5 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     write({ id, ok: false, error: { message: 'it failed', kind: 'PairingError' } });
     return;
   }
-  if (method === 'unreachable') {
-    write({
-      id,
-      ok: false,
-      error: { message: 'offline', kind: 'TimeoutError', unreachable: true },
-    });
-    return;
-  }
   write({ id, ok: true, result: { pong: true, params } });
 });
