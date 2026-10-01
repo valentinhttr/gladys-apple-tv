@@ -175,6 +175,7 @@ export class PyatvBridge extends EventEmitter {
     }
     const error = new Error(message.error?.message || `"${pending.method}" failed.`);
     error.kind = message.error?.kind;
+    error.unreachable = message.error?.unreachable === true;
     pending.reject(error);
   }
 

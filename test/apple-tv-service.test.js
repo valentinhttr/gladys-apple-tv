@@ -143,6 +143,36 @@ describe('syncDevices', () => {
   });
 });
 
+describe('connection logging', () => {
+  it('logs one outage and one recovery despite repeated retries and worker events', async () => {
+    const { service, bridge } = makeService();
+    service.registerBridgeHandlers();
+    let reachable = false;
+    bridge.handlers.connect = ({ identifier }) => {
+      bridge.emit('connection', { identifier, connected: reachable });
+      if (!reachable) {
+        throw Object.assign(new Error('No Apple TV answered'), { unreachable: true });
+      }
+      return { capabilities: {}, state: {} };
+    };
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await service.poll(gladysDevice());
+    }
+    const { lines } = service.logger;
+    assert.equal(lines.info.length, 1);
+    assert.match(lines.info[0], /Living room is unreachable/);
+    assert.deepEqual(lines.warn, []);
+    assert.deepEqual(lines.debug, []);
+    assert.equal(bridge.calls.filter(({ method }) => method === 'connect').length, 3);
+
+    reachable = true;
+    await service.poll(gladysDevice());
+    assert.equal(lines.info.length, 2);
+    assert.match(lines.info[1], /Living room is back online/);
+  });
+});
+
 describe('setValue', () => {
   it('routes a remote key to the matching pyatv action', async () => {
     const { bridge, service } = makeService({
