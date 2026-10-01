@@ -20,6 +20,7 @@ the Gladys supervisor captures (`docker logs`).
 """
 
 import asyncio
+import errno
 import json
 import logging
 import os
@@ -38,6 +39,18 @@ from pyatv.protocols import PROTOCOLS
 from pyatv.storage.file_storage import FileStorage
 
 LOGGER = logging.getLogger("pyatv-bridge")
+
+
+def is_unreachable_error(error: Exception) -> bool:
+    """Expected network failures while a device is unavailable."""
+    return isinstance(error, (
+        pyatv_exceptions.ConnectionFailedError,
+        pyatv_exceptions.ConnectionLostError,
+        ConnectionError,
+        asyncio.TimeoutError,
+    )) or (isinstance(error, OSError) and error.errno in {
+        errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ENETDOWN, errno.EHOSTDOWN,
+    })
 
 # Directly forwarded to `atv.remote_control.<name>()`. Everything that needs an
 # argument or another interface is handled explicitly in `DeviceSession.command`.
@@ -442,12 +455,12 @@ class DeviceSession(
                 await self._teardown()
                 try:
                     await self.connect()
-                    LOGGER.info("Reconnected to %s", self.identifier)
                     return
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:  # noqa: BLE001 - keep retrying, whatever it was
-                    LOGGER.info("Reconnection to %s failed: %s", self.identifier, err)
+                    if not is_unreachable_error(err):
+                        LOGGER.warning("Reconnection to %s failed: %s", self.identifier, err)
         except asyncio.CancelledError:
             pass
         finally:
@@ -456,12 +469,12 @@ class DeviceSession(
     # -- pyatv listeners ----------------------------------------------------
 
     def connection_lost(self, exception: Exception) -> None:
-        LOGGER.warning("Connection to %s lost: %s", self.identifier, exception)
+        if not is_unreachable_error(exception):
+            LOGGER.warning("Connection to %s lost: %s", self.identifier, exception)
         self.connected = False
         self._schedule_reconnect(str(exception) or "connection lost")
 
     def connection_closed(self) -> None:
-        LOGGER.info("Connection to %s closed by the device", self.identifier)
         self.connected = False
         self._schedule_reconnect("connection closed by the device")
 
@@ -1025,13 +1038,20 @@ class Bridge:
             result = await handler(params)
             self._write({"id": request_id, "ok": True, "result": result})
         except Exception as err:  # noqa: BLE001 - every failure travels to Node
-            LOGGER.info("%s failed: %s", method, err)
-            LOGGER.debug("%s", traceback.format_exc())
+            # Node owns connection transition logs. A failed background retry
+            # must stay silent here too, including when DEBUG is enabled.
+            if method != "connect" or not is_unreachable_error(err):
+                LOGGER.info("%s failed: %s", method, err)
+                LOGGER.debug("%s", traceback.format_exc())
             self._write(
                 {
                     "id": request_id,
                     "ok": False,
-                    "error": {"message": str(err) or type(err).__name__, "kind": type(err).__name__},
+                    "error": {
+                        "message": str(err) or type(err).__name__,
+                        "kind": type(err).__name__,
+                        "unreachable": is_unreachable_error(err),
+                    },
                 }
             )
 
