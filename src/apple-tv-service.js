@@ -179,6 +179,7 @@ export class AppleTvService {
         device: null,
         host: null,
         connected: false,
+        loggedConnection: null,
         paired: null,
         capabilities: null,
         apps: [],
@@ -214,7 +215,7 @@ export class AppleTvService {
       entry.paired = true;
       entry.capabilities = result.capabilities || {};
       entry.host = result.address || entry.host;
-      this.logger.info(`Connected to ${entry.device?.name || identifier} (${entry.host})`);
+      this._logConnection(entry, true);
       await this._loadApps(entry);
       await this.publishDeviceState(identifier, result.state || {});
       await this.publishTransport(identifier, TRANSPORTS.LOCAL);
@@ -224,6 +225,8 @@ export class AppleTvService {
       if (error.kind === 'NoCredentialsError') {
         entry.paired = false;
         this.logger.warn(`${entry.device?.name || identifier} is not paired yet.`);
+      } else if (error.unreachable) {
+        this._logConnection(entry, false);
       } else {
         this.logger.warn(
           `Could not connect to ${entry.device?.name || identifier}: ${error.message}`,
@@ -232,6 +235,28 @@ export class AppleTvService {
       await this.publishTransport(identifier, TRANSPORTS.UNREACHABLE);
       return false;
     }
+  }
+
+  /**
+   * Log transitions once, including when a worker event and a request result
+   * describe the same connection. Retries never produce a log, even at DEBUG.
+   *
+   * @param {object} entry Tracked device entry.
+   * @param {boolean} connected Whether the device is reachable.
+   * @returns {void}
+   */
+  _logConnection(entry, connected) {
+    if (entry.loggedConnection === connected) {
+      return;
+    }
+    const previous = entry.loggedConnection;
+    entry.loggedConnection = connected;
+    const name = entry.device?.name || entry.identifier;
+    this.logger.info(
+      connected
+        ? `${name} ${previous === false ? 'is back online' : 'connected'} (${entry.host})`
+        : `${name} is unreachable. Reconnecting automatically.`,
+    );
   }
 
   /**
@@ -606,21 +631,18 @@ export class AppleTvService {
       });
     });
 
-    this.bridge.on('connection', ({ identifier, connected, capabilities, error }) => {
+    this.bridge.on('connection', ({ identifier, connected, capabilities }) => {
       const entry = this._entry(identifier);
       entry.connected = Boolean(connected);
       if (connected) {
         entry.paired = true;
         entry.capabilities = capabilities || entry.capabilities;
-        this.logger.info(`${entry.device?.name || identifier} is back online`);
       } else {
         // Nothing is known about the device any more: drop the memory of the
         // published values so the next connection republishes everything.
         entry.lastValues.clear();
-        this.logger.warn(
-          `${entry.device?.name || identifier} went offline: ${error || 'unknown reason'}`,
-        );
       }
+      this._logConnection(entry, Boolean(connected));
       Promise.all([
         this.publishTransport(identifier, connected ? TRANSPORTS.LOCAL : TRANSPORTS.UNREACHABLE),
         this.refreshConnectionStatus(),

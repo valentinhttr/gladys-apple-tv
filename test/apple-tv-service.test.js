@@ -143,6 +143,93 @@ describe('syncDevices', () => {
   });
 });
 
+describe('connection logging', () => {
+  it('logs once per outage, keeps retrying and deduplicates worker events and replies', async () => {
+    const { service, bridge, gladys } = makeService();
+    service.registerBridgeHandlers();
+    let reachable = false;
+    bridge.handlers.connect = ({ identifier }) => {
+      bridge.emit('connection', { identifier, connected: reachable });
+      if (!reachable) {
+        throw Object.assign(new Error('No Apple TV answered'), {
+          kind: 'ConnectionFailedError',
+          unreachable: true,
+        });
+      }
+      return { capabilities: {}, state: { power: 'off' } };
+    };
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await service.poll(gladysDevice());
+    }
+    const { lines } = service.logger;
+    assert.equal(lines.info.length, 1);
+    assert.match(lines.info[0], /Living room is unreachable/);
+    assert.deepEqual(lines.warn, []);
+    assert.deepEqual(lines.debug, []);
+    assert.equal(bridge.calls.filter(({ method }) => method === 'connect').length, 5);
+    assert.equal(gladys.transports.at(-1).transport, 'unreachable');
+
+    await assert.rejects(
+      service.setValue(gladysDevice(), { external_id: `${EXTERNAL_ID}:select` }, 1),
+      /unreachable/,
+    );
+    assert.equal(lines.info.length, 1);
+
+    reachable = true;
+    await service.poll(gladysDevice());
+    assert.equal(lines.info.length, 2);
+    assert.match(lines.info[1], /Living room is back online/);
+    assert.equal(gladys.transports.at(-1).transport, 'local');
+    assert.ok(gladys.states.some(({ state }) => state === 0));
+
+    bridge.emit('connection', { identifier: IDENTIFIER, connected: false });
+    reachable = false;
+    await service.poll(gladysDevice());
+    assert.equal(lines.info.length, 3);
+    bridge.emit('connection', { identifier: IDENTIFIER, connected: true });
+    bridge.emit('connection', { identifier: IDENTIFIER, connected: true });
+    assert.equal(lines.info.length, 4);
+    assert.match(lines.info[3], /back online/);
+  });
+
+  it('handles failures without worker events and tracks each device independently', async () => {
+    const { service } = makeService({
+      handlers: {
+        connect: () => {
+          throw Object.assign(new Error('timeout'), { unreachable: true });
+        },
+      },
+    });
+    const other = gladysDevice({
+      name: 'Bedroom',
+      params: [
+        { name: PARAMS.IDENTIFIER, value: 'other' },
+        { name: PARAMS.HOST, value: '192.168.1.21' },
+      ],
+    });
+    await service.poll(gladysDevice());
+    await service.poll(other);
+    await service.poll(gladysDevice());
+    await service.poll(other);
+    assert.equal(service.logger.lines.info.length, 2);
+  });
+
+  it('keeps pairing and unexpected errors visible', async () => {
+    for (const kind of ['NoCredentialsError', 'AuthenticationError', 'RuntimeError']) {
+      const { service } = makeService({
+        handlers: {
+          connect: () => {
+            throw Object.assign(new Error('failure'), { kind });
+          },
+        },
+      });
+      await service.poll(gladysDevice());
+      assert.equal(service.logger.lines.warn.length, 1, kind);
+    }
+  });
+});
+
 describe('setValue', () => {
   it('routes a remote key to the matching pyatv action', async () => {
     const { bridge, service } = makeService({

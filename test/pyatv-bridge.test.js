@@ -48,6 +48,15 @@ describe('PyatvBridge', () => {
     await assert.rejects(() => bridge.request('quiet', {}, { timeout: 150 }), /did not answer/);
   });
 
+  it('preserves the worker classification of an unreachable device', async () => {
+    const bridge = open();
+    await assert.rejects(bridge.request('unreachable'), (error) => {
+      assert.equal(error.unreachable, true);
+      assert.equal(error.kind, 'TimeoutError');
+      return true;
+    });
+  });
+
   it('emits the events the worker pushes', async () => {
     const bridge = open();
     const ready = once(bridge, 'ready');
