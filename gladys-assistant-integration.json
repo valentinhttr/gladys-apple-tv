@@ -6,8 +6,8 @@
     "en": "Control your Apple TV: power, remote, playback, volume and applications.",
     "fr": "Contrôlez votre Apple TV : alimentation, télécommande, lecture, volume et applications."
   },
-  "version": "1.2.1",
-  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:1.2.1",
+  "version": "2.0.0",
+  "docker_image": "ghcr.io/valentinhttr/gladys-apple-tv:2.0.0",
   "cover_image": "https://raw.githubusercontent.com/valentinhttr/gladys-apple-tv/main/assets/cover.jpg",
   "gladys_version": ">=5.1.0",
   "transports": ["local"],
