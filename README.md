@@ -66,6 +66,15 @@ core only schedules a poll for `should_poll === true`, and a device carrying a
 crash server-side — which is what the generic "an error occurred while saving
 this device" turned out to be.
 
+## Dashboard widgets (Gladys 5.1+)
+
+`src/widgets.js` registers two declarative widgets: playback and up to four
+favorite applications. They read the existing session's cached metadata and
+reuse `setValue` for commands. Content has a 10-second TTL and a command polls
+the device before Gladys refreshes the card. No extra connection or timer is
+created. Favorites use installed application names because Gladys 5.1 dynamic
+selects support devices only. See the user guides for configuration.
+
 ## Architecture
 
 The Gladys integration SDK is Node.js. pyatv — the only complete implementation
@@ -178,9 +187,8 @@ The Apple TV to pair is picked from a `select` field with `source: "devices"`,
 which the core fills with the integration's own devices — so nobody has to look
 up an IP address. Those dynamic options are only resolved server side from
 Gladys 4.85.0 (`getDynamicOptions`); on an older core such a field is rejected
-with `must be one of ` and an empty list. The `gladys_version` floor is 5.0.0
-rather than 4.85.0 because of the multi-service mDNS scan above, which is the
-stricter of the two requirements. The
+with `must be one of ` and an empty list. The `gladys_version` floor is now 5.1.0 because the integration also declares
+dashboard widgets. The
 price is that a device must be added from the Discovery tab before it can be
 paired, which is the order the manifest walks the user through anyway.
 

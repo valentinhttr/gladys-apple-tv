@@ -182,6 +182,7 @@ export class AppleTvService {
         paired: null,
         capabilities: null,
         apps: [],
+        state: {},
         lastValues: new Map(),
       };
       this.devices.set(identifier, entry);
@@ -214,6 +215,7 @@ export class AppleTvService {
       entry.paired = true;
       entry.capabilities = result.capabilities || {};
       entry.host = result.address || entry.host;
+      entry.state = {};
       this.logger.info(`Connected to ${entry.device?.name || identifier} (${entry.host})`);
       await this._loadApps(entry);
       await this.publishDeviceState(identifier, result.state || {});
@@ -469,6 +471,7 @@ export class AppleTvService {
    */
   async publishDeviceState(identifier, state) {
     const entry = this._entry(identifier);
+    Object.assign(entry.state, state);
     const ids = externalIdsFor(this.gladys, identifier);
     const states = [];
 
@@ -617,6 +620,7 @@ export class AppleTvService {
         // Nothing is known about the device any more: drop the memory of the
         // published values so the next connection republishes everything.
         entry.lastValues.clear();
+        entry.state = {};
         this.logger.warn(
           `${entry.device?.name || identifier} went offline: ${error || 'unknown reason'}`,
         );
@@ -631,6 +635,7 @@ export class AppleTvService {
       for (const entry of this.devices.values()) {
         entry.connected = false;
         entry.lastValues.clear();
+        entry.state = {};
       }
       this.refreshConnectionStatus().catch(() => {});
     });

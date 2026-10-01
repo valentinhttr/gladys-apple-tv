@@ -100,14 +100,8 @@ describe('manifest', () => {
     }
   });
 
-  it('requires the Gladys version that browses every declared mDNS service', () => {
-    // Two constraints, and the newer one wins. `source: "devices"` is only
-    // validated server side from 4.85.0 (getDynamicOptions); below that every
-    // action is rejected with "must be one of " and an empty list. From 5.0.0
-    // the core browses all the declared mdns entries instead of the first one,
-    // which is what makes the Companion announcement reach the integration at
-    // all — without it a routed network can never be recovered.
-    assert.equal(manifest.gladys_version, '>=5.0.0');
+  it('requires Gladys dashboard widget support', () => {
+    assert.equal(manifest.gladys_version, '>=5.1.0');
   });
 
   it('gives every action enough time for its slowest step', () => {

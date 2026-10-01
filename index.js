@@ -4,6 +4,7 @@ import { buildActions } from './src/actions.js';
 import { AppleTvService } from './src/apple-tv-service.js';
 import { normalizeConfig } from './src/config.js';
 import { PyatvBridge } from './src/pyatv-bridge.js';
+import { registerWidgets } from './src/widgets.js';
 
 // A mediated mDNS scan is a single HTTP request that Gladys holds open for the
 // whole capture window (up to 30 s): the SDK timeout has to outlive it.
@@ -15,6 +16,7 @@ let config = normalizeConfig();
 const service = new AppleTvService({ gladys, bridge, config, logger });
 
 service.registerBridgeHandlers();
+registerWidgets({ gladys, service });
 
 gladys.onScanRequest(async () => {
   logger.info('Scan requested');

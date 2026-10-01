@@ -7,10 +7,30 @@ référence des protocoles AirPlay et Companion d'Apple, celle qu'utilise aussi
 Home Assistant. Rien ne passe par les serveurs d'Apple, aucun identifiant Apple
 n'est nécessaire.
 
+## Widgets du tableau de bord
+
+Dans l’éditeur du tableau de bord, ajoutez un widget de l’intégration Apple TV,
+puis choisissez l’appareil :
+
+- **Apple TV — Lecture** : titre et application en cours, état de lecture,
+  lecture/pause, recul, avance et mise en veille selon les capacités de l’appareil.
+  En veille, le bouton **Allumer** remplace les commandes de lecture.
+- **Apple TV — Favoris** : saisissez jusqu’à quatre noms d’applications installées
+  dans les réglages du widget, par exemple `Netflix` ou `Plex`. Les majuscules
+  n’ont pas d’importance ; laissez les autres champs vides. Sans favoris, le
+  widget affiche les noms disponibles. Les raccourcis d’applications doivent être
+  activés dans la configuration de l’intégration. Un bouton ouvre l’application ;
+  il ne lance pas automatiquement un film.
+
+Les cartes se rafraîchissent toutes les dix secondes et après une commande.
+L’ouverture du tableau de bord ne réveille pas l’Apple TV. Les métadonnées
+dépendent de l’application utilisée ; aucune pochette n’est affichée.
+Vous pouvez ajouter plusieurs instances pour plusieurs Apple TV.
+
 ## Prérequis
 
 - Une Apple TV (HD, 4K, toute génération sous tvOS 15 ou plus récent).
-- Gladys 5.0.0 ou plus récent.
+- Gladys 5.1.0 ou plus récent.
 - L'Apple TV et votre serveur Gladys sur le **même réseau**. Des VLAN ou
   sous-réseaux routés fonctionnent aussi, à condition qu'un relais mDNS transmette
   les annonces : voir le dépannage.
