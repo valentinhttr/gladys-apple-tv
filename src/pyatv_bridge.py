@@ -24,6 +24,7 @@ import errno
 import json
 import logging
 import os
+import re
 import sys
 import traceback
 from ipaddress import IPv4Address
@@ -147,23 +148,6 @@ CAPABILITY_FEATURES = {
 # remote, power and apps.
 PAIRABLE_PROTOCOLS = ("AirPlay", "Companion")
 
-# The models this integration controls. A HomePod runs tvOS and speaks the very
-# same AirPlay and Companion protocols, so the operating system tells the two
-# apart in no way at all — pyatv itself derives `operating_system` FROM the
-# model, and answers TvOS for a HomePod. Matching on the hardware model is the
-# only honest test, and Apple publishes it in the AirPlay TXT record.
-APPLE_TV_MODELS = frozenset(
-    {
-        DeviceModel.AppleTVGen1,
-        DeviceModel.Gen2,
-        DeviceModel.Gen3,
-        DeviceModel.Gen4,
-        DeviceModel.Gen4K,
-        DeviceModel.AppleTV4KGen2,
-        DeviceModel.AppleTV4KGen3,
-    }
-)
-
 # Reconnection backoff, in seconds. An Apple TV unplugged for the evening must
 # not be retried in a tight loop, and one that just rebooted must come back
 # quickly.
@@ -261,28 +245,36 @@ def _enum_name(value: Any) -> Optional[str]:
 
 
 def is_apple_tv(info: interface.DeviceInfo) -> bool:
-    """Tell an Apple TV from the other Apple devices an AirPlay scan finds.
+    """Recognise supported Apple TV HD/4K models in an AirPlay scan.
 
     A scan also returns HomePods, AirPort Express, Macs and third-party AirPlay
     speakers. None of them can be driven by this integration, and a HomePod is
     the trap: it runs tvOS and announces both AirPlay and Companion, so it looks
     exactly like an Apple TV to everything except its model.
 
-    pyatv resolves the model of the hardware it knows; anything newer than the
-    installed pyatv falls back to the raw identifier, which Apple has always
-    prefixed with `AppleTV` (`AppleTV14,1`) — HomePods use `AudioAccessory`.
-    So an Apple TV released after this pyatv is still recognised.
+    Older Apple TVs are outside our tvOS 15+ support scope. Rejecting them also
+    excludes third-party receivers identified as an Apple TV 3 (Freebox Player).
+    The model is self-reported, so this is a compatibility filter, not hardware
+    authentication. Accept future pyatv 4K enum members that follow the naming
+    convention AppleTV4KGen<number>.
+
+    For hardware newer than pyatv, keep the raw AppleTV<major>,<minor> fallback.
+    HD starts at AppleTV5,3; requiring major >= 5 excludes legacy identifiers
+    even when pyatv does not resolve them.
 
     :param info: Device information of a scanned configuration.
-    :returns: True when the device is an Apple TV.
+    :returns: True when the declared model is a supported Apple TV.
     """
-    if info.model in APPLE_TV_MODELS:
+    if info.model in (DeviceModel.Gen4, DeviceModel.Gen4K) or re.fullmatch(
+        r"AppleTV4KGen[1-9][0-9]*", info.model.name
+    ):
         return True
     if info.model != DeviceModel.Unknown:
         # A model pyatv resolved to something else (HomePod, AirPort Express,
         # the Music app) is a definitive no, whatever the raw string says.
         return False
-    return (info.raw_model or "").startswith("AppleTV")
+    raw_model = re.fullmatch(r"AppleTV([1-9][0-9]*),[1-9][0-9]*", info.raw_model or "")
+    return raw_model is not None and int(raw_model.group(1)) >= 5
 
 
 def describe_config(config: interface.BaseConfig) -> Dict[str, Any]:
@@ -1183,13 +1175,40 @@ def _self_test_model_filter() -> None:
     than the installed pyatv. That pyatv maps `AudioAccessory5,1` onto
     HomePodMini in the first place is proven end to end by the mediated scan.
     """
+    from enum import Enum
+    from types import SimpleNamespace
+
+    # Model a future pyatv release without requiring that release to exist.
+    future_models = Enum("FutureModels", ["AppleTV4KGen4", "AppleTV4KGen10", "AppleTV4KGen4Other"])
+    for model, expected in [
+        (future_models.AppleTV4KGen4, True),
+        (future_models.AppleTV4KGen10, True),
+        (future_models.AppleTV4KGen4Other, False),
+    ]:
+        assert is_apple_tv(SimpleNamespace(model=model, raw_model="AppleTV99,1")) is expected
+
     for model, raw_model, expected in [
+        (DeviceModel.Gen4, "AppleTV5,3", True),
+        (DeviceModel.Gen4K, "AppleTV6,2", True),
+        (DeviceModel.AppleTV4KGen2, "AppleTV11,1", True),
         (DeviceModel.AppleTV4KGen3, "AppleTV14,1", True),
-        (DeviceModel.Gen2, "AppleTV2,1", True),  # legacy software, not tvOS at all
+        (DeviceModel.AppleTVGen1, "AppleTV1,1", False),
+        (DeviceModel.Gen2, "AppleTV2,1", False),
+        (DeviceModel.Gen3, "AppleTV3,1", False),
+        (DeviceModel.Gen3, "AppleTV3,2", False),
+        (DeviceModel.Gen3, "AppleTV99,1", False),  # resolved model takes precedence
         (DeviceModel.HomePodMini, "AudioAccessory5,1", False),  # runs tvOS
         (DeviceModel.HomePodGen2, "AudioAccessory6,1", False),
         (DeviceModel.AirPortExpressGen2, "AirPort10,115", False),
         (DeviceModel.Unknown, "AppleTV99,1", True),  # released after this pyatv
+        (DeviceModel.Unknown, "AppleTV5,3", True),
+        (DeviceModel.Unknown, "AppleTV1,1", False),
+        (DeviceModel.Unknown, "AppleTV2,1", False),
+        (DeviceModel.Unknown, "AppleTV3,1", False),
+        (DeviceModel.Unknown, "AppleTV3,2", False),
+        (DeviceModel.Unknown, "AppleTV4,1", False),
+        (DeviceModel.Unknown, "AppleTV", False),
+        (DeviceModel.Unknown, "AppleTV99,1-other", False),
         (DeviceModel.Unknown, "MacBookPro18,3", False),
         (DeviceModel.Unknown, "", False),
     ]:
@@ -1262,6 +1281,22 @@ def _self_test_mediated_scan() -> None:
             "port": 49152,
             "txt": ["rpMac=1", "rpMd=AudioAccessory5,1", "rpFl=0x36782", "rpAD=5678efab"],
         },
+        # Synthetic reproduction of the reported Freebox -> Apple TV 3 result.
+        # The user's logs did not include the actual model/am TXT properties.
+        {
+            "name": "Freebox Player._airplay._tcp.local",
+            "host": "Freebox-Player.local",
+            "addresses": ["192.168.1.52"],
+            "port": 7000,
+            "txt": ["deviceid=22:33:44:55:66:77", "model=AppleTV3,2"],
+        },
+        {
+            "name": "223344556677@Freebox Player._raop._tcp.local",
+            "host": "Freebox-Player.local",
+            "addresses": ["192.168.1.52"],
+            "port": 5000,
+            "txt": ["am=AppleTV3,2"],
+        },
     ]
 
     bridge = object.__new__(Bridge)
@@ -1269,9 +1304,13 @@ def _self_test_mediated_scan() -> None:
     bridge.announced = {}
     configs = asyncio.run(bridge.remember_announcements(announcements))
 
-    assert len(configs) == 2, f"expected two devices, got {len(configs)}"
+    assert len(configs) == 3, f"expected three devices, got {len(configs)}"
     by_address = {str(entry.address): entry for entry in configs}
-    assert set(by_address) == {"192.168.1.50", "192.168.1.51"}, f"addresses: {sorted(by_address)}"
+    assert set(by_address) == {"192.168.1.50", "192.168.1.51", "192.168.1.52"}, f"addresses: {sorted(by_address)}"
+
+    freebox = describe_config(by_address["192.168.1.52"])
+    assert freebox["model"] == "Apple TV 3", f"model: {freebox['model']}"
+    assert not freebox["is_apple_tv"], f"an Apple TV 3 receiver was accepted: {freebox}"
 
     homepod = describe_config(by_address["192.168.1.51"])
     assert not homepod["is_apple_tv"], f"a HomePod was taken for an Apple TV: {homepod}"
