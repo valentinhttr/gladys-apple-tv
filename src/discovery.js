@@ -91,6 +91,8 @@ function describeAnswer(device) {
     name: device?.name || null,
     address: device?.address || null,
     model: device?.model || null,
+    raw_model: device?.raw_model || null,
+    protocols: (device?.services || []).map((service) => service.protocol),
     operating_system: device?.operating_system || null,
     is_apple_tv: Boolean(device?.is_apple_tv),
     source: device?.source || 'direct',

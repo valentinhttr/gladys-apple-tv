@@ -127,6 +127,7 @@ describe('discoverAppleTvs', () => {
       /Candidate address 1\/1: \{"address":"192\.168\.1\.20","sources":\["mDNS announcement"\]\}/,
     );
     assert.match(logs, /pyatv response 1\/1: \{"name":"Living room","address":"192\.168\.1\.20"/);
+    assert.match(logs, /"raw_model":"AppleTV14,1","protocols":\[\]/);
   });
 
   it('still scans the manual addresses when the mediated capture fails', async () => {

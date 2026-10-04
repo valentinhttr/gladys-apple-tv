@@ -201,12 +201,14 @@ a static lease on your router avoids the problem entirely.
 level — a common case with HDMI-CEC. Use the volume up and volume down buttons
 instead.
 
-**The scan lists devices that are not Apple TVs.** It should not: a HomePod, an
-AirPort Express or an AirPlay speaker is recognised on its hardware model and
-left out, even though a HomePod runs tvOS and speaks the same protocols. If one
-still shows up, its model is missing from the announcement — the log line
-`pyatv response n/n` gives the model the integration read, which is what to
-report in a bug.
+**The scan lists devices that are not Apple TVs.** The filter accepts Apple TV
+HD and 4K models, as well as hardware identifiers for newer models not yet known
+to pyatv. Generations 1, 2 and 3 are excluded, including third-party receivers
+identified as an Apple TV 3, such as the reported Freebox Player. The advertised
+model is not proof of the actual hardware: another receiver could announce an
+accepted model. For false positives, include the `pyatv response n/n` log line
+in the bug report: it lists the resolved model, the available raw model and the
+detected protocols.
 
 **"Manual IPv4 addresses" does not restrict the scan.** The addresses are added
 to the ones Gladys captured, they never replace them. The field exists to reach

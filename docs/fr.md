@@ -218,12 +218,14 @@ utilisée par l'intégration ; un bail statique sur votre routeur évite le prob
 **Il n'y a pas de curseur de volume.** Votre installation n'expose pas de niveau
 de volume lisible — cas fréquent en HDMI-CEC. Utilisez les boutons volume +/−.
 
-**La recherche liste des appareils qui ne sont pas des Apple TV.** Elle ne
-devrait pas : un HomePod, une AirPort Express ou une enceinte AirPlay est
-reconnu à son modèle matériel et écarté, alors même qu'un HomePod tourne sous
-tvOS et parle les mêmes protocoles. S'il en apparaît malgré tout un, c'est que
-son modèle manque à l'annonce — la ligne de journal `pyatv response n/n` indique
-le modèle lu par l'intégration, à joindre au rapport de bug.
+**La recherche liste des appareils qui ne sont pas des Apple TV.** Le filtre
+accepte les modèles Apple TV HD et 4K, ainsi que les identifiants matériels de
+modèles plus récents encore inconnus de pyatv. Les générations 1, 2 et 3 sont
+exclues, y compris les récepteurs tiers reconnus comme une Apple TV 3, comme le
+Freebox Player signalé. Le modèle annoncé n'est pas une preuve du matériel réel :
+un autre récepteur pourrait annoncer un modèle accepté. En cas de faux positif,
+joignez la ligne de journal `pyatv response n/n` au rapport de bug : elle indique
+le modèle reconnu, le modèle brut disponible et les protocoles détectés.
 
 **« Adresses IPv4 manuelles » ne restreint pas la recherche.** Ces adresses
 s'ajoutent à celles que Gladys a captées, elles ne les remplacent jamais. Le
