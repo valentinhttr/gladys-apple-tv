@@ -15,6 +15,9 @@ puis choisissez l’appareil :
 - **Apple TV — Lecture** : titre et application en cours, état de lecture,
   lecture/pause, recul, avance et mise en veille selon les capacités de l’appareil.
   En veille, le bouton **Allumer** remplace les commandes de lecture.
+- **Apple TV — Volume** : consultez le niveau actuel et ouvrez le formulaire
+  pour le régler de 0 à 100 %, si votre installation le permet. Le niveau connu
+  est prérempli. En veille, aucune commande de volume n’est proposée.
 - **Apple TV — Favoris** : saisissez jusqu’à quatre noms d’applications installées
   dans les réglages du widget, par exemple `Netflix` ou `Plex`. Les majuscules
   n’ont pas d’importance ; laissez les autres champs vides. Sans favoris, le
@@ -30,7 +33,7 @@ Vous pouvez ajouter plusieurs instances pour plusieurs Apple TV.
 ## Prérequis
 
 - Une Apple TV (HD, 4K, toute génération sous tvOS 15 ou plus récent).
-- Gladys 5.1.0 ou plus récent.
+- Gladys 5.2.0 ou plus récent.
 - L'Apple TV et votre serveur Gladys sur le **même réseau**. Des VLAN ou
   sous-réseaux routés fonctionnent aussi, à condition qu'un relais mDNS transmette
   les annonces : voir le dépannage.

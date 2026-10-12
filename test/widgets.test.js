@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
+import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
 import { AppleTvService } from '../src/apple-tv-service.js';
 import { normalizeConfig } from '../src/config.js';
 import { PARAMS } from '../src/constants.js';
@@ -56,6 +57,74 @@ function setup() {
 const buttons = (content) => content.components.filter((component) => component.type === 'button');
 
 describe('dashboard widgets', () => {
+  it('sets volume through the SDK widget protocol and rejects invalid or unavailable commands', async () => {
+    const { service, bridge, entry, settings, gladys: stub } = setup();
+    const gladys = createFakeGladys({ selector: stub.selector, devices: stub.devices });
+    await gladys.connect();
+    service.gladys = gladys;
+    registerWidgets({ gladys, service });
+    entry.capabilities.set_volume = true;
+    entry.state.volume = 32;
+    const response = await gladys.fake.widgetGet('volume', { settings });
+    assert.equal(response.success, true);
+    const content = response.data.content;
+    assert.deepEqual(validateWidgetContent(content), []);
+    const volume = buttons(content).find((button) => button.action.key === 'set_volume');
+    assert.equal(volume.action.fields[0].default, 32);
+    for (const value of [0, 100, 42.5]) {
+      const result = await gladys.fake.widgetAction(
+        'volume',
+        'set_volume',
+        {},
+        {
+          settings,
+          values: { volume: value },
+        },
+      );
+      assert.equal(result.success, true, JSON.stringify(result));
+      assert.deepEqual(bridge.calls.at(-2), {
+        method: 'command',
+        params: { identifier: 'salon', action: 'set_volume', value },
+      });
+    }
+    const count = bridge.calls.length;
+    for (const value of [undefined, null, '50', -1, 101, NaN, Infinity]) {
+      const result = await gladys.fake.widgetAction(
+        'volume',
+        'set_volume',
+        {},
+        {
+          settings,
+          values: { volume: value },
+        },
+      );
+      assert.equal(result.success, false);
+    }
+    entry.capabilities.set_volume = false;
+    const unavailable = await gladys.fake.widgetAction(
+      'volume',
+      'set_volume',
+      {},
+      {
+        settings,
+        values: { volume: 50 },
+      },
+    );
+    assert.equal(unavailable.success, false);
+    assert.equal(bridge.calls.length, count);
+  });
+
+  it('does not invent a volume default and hides the form in standby', () => {
+    const { entry, render } = setup();
+    entry.capabilities.set_volume = true;
+    const content = render('volume');
+    assert.deepEqual(validateWidgetContent(content), []);
+    const volume = buttons(content).find((button) => button.action.key === 'set_volume');
+    assert.equal(volume.action.fields[0].default, undefined);
+    entry.state.power = 'off';
+    assert.ok(!buttons(render('volume')).some((button) => button.action.key === 'set_volume'));
+  });
+
   it('registers exactly the widgets in the manifest, with valid bounded content', () => {
     const { gets, actions, render, entry } = setup();
     const manifest = JSON.parse(

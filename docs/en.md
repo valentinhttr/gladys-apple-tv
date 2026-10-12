@@ -14,6 +14,9 @@ your device:
 - **Apple TV — Playback**: current title and application, playback state,
   play/pause, skip backward, skip forward and standby, depending on device
   capabilities. In standby, **Turn on** replaces the playback controls.
+- **Apple TV — Volume**: view the current level and open a form to set it from
+  0 to 100%, when your setup supports it. The known level is prefilled. No volume
+  command is offered in standby.
 - **Apple TV — Favorites**: enter up to four installed application names in the
   widget settings, such as `Netflix` or `Plex`. Names are case-insensitive; leave
   unused fields empty. Without favorites, the widget shows available names.
@@ -27,7 +30,7 @@ not displayed. Add multiple widget instances for multiple Apple TVs.
 ## Requirements
 
 - An Apple TV (HD, 4K, any generation running tvOS 15 or later).
-- Gladys 5.1.0 or later.
+- Gladys 5.2.0 or later.
 - The Apple TV and your Gladys server on the **same network**. Routed VLANs or
   subnets work too, provided an mDNS relay forwards the announcements: see
   troubleshooting.

@@ -66,13 +66,14 @@ core only schedules a poll for `should_poll === true`, and a device carrying a
 crash server-side — which is what the generic "an error occurred while saving
 this device" turned out to be.
 
-## Dashboard widgets (Gladys 5.1+)
+## Dashboard widgets (Gladys 5.2+)
 
-`src/widgets.js` registers two declarative widgets: playback and up to four
-favorite applications. They read the existing session's cached metadata and
+`src/widgets.js` registers three declarative widgets: playback, up to four
+favorite applications and volume. They read the existing session's cached metadata and
 reuse `setValue` for commands. Content has a 10-second TTL and a command polls
 the device before Gladys refreshes the card. No extra connection or timer is
-created. Favorites use installed application names because Gladys 5.1 dynamic
+created. The volume widget uses a Gladys 5.2 action form to set the volume
+from 0 to 100%, prefilled from the cached level when available. Favorites use installed application names because Gladys 5.1 dynamic
 selects support devices only. See the user guides for configuration.
 
 ## Architecture
@@ -187,8 +188,8 @@ The Apple TV to pair is picked from a `select` field with `source: "devices"`,
 which the core fills with the integration's own devices — so nobody has to look
 up an IP address. Those dynamic options are only resolved server side from
 Gladys 4.85.0 (`getDynamicOptions`); on an older core such a field is rejected
-with `must be one of ` and an empty list. The `gladys_version` floor is now 5.1.0 because the integration also declares
-dashboard widgets. The
+with `must be one of ` and an empty list. The `gladys_version` floor is now 5.2.0 because the volume widget uses an action form
+for volume control. The
 price is that a device must be added from the Discovery tab before it can be
 paired, which is the order the manifest walks the user through anyway.
 

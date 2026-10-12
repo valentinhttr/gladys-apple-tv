@@ -101,7 +101,7 @@ describe('manifest', () => {
   });
 
   it('requires Gladys dashboard widget support', () => {
-    assert.equal(manifest.gladys_version, '>=5.1.0');
+    assert.equal(manifest.gladys_version, '>=5.2.0');
   });
 
   it('gives every action enough time for its slowest step', () => {

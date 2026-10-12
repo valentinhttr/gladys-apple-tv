@@ -100,6 +100,45 @@ export function buildWidget({ gladys, service, key, settings = {} }) {
     return result;
   }
 
+  if (key === 'volume') {
+    if (state.power === 'off') {
+      body(label('Apple TV is in standby.', 'L’Apple TV est en veille.'));
+      return result;
+    }
+    if (!capabilities.set_volume) {
+      body(
+        label(
+          'Volume adjustment is unavailable on this setup.',
+          'Le réglage du volume est indisponible sur cette installation.',
+        ),
+      );
+      return result;
+    }
+    if (Number.isFinite(state.volume)) {
+      body(`${Math.min(100, Math.max(0, Math.round(state.volume)))} %`);
+    }
+    if (capabilities.set_volume) {
+      const field = {
+        key: 'volume',
+        type: 'number',
+        label: label('Volume (%)', 'Volume (%)'),
+        required: true,
+        min: 0,
+        max: 100,
+      };
+      if (Number.isFinite(state.volume)) {
+        field.default = Math.min(100, Math.max(0, Math.round(state.volume)));
+      }
+      components.push({
+        type: 'button',
+        label: label('Volume', 'Volume'),
+        action: { key: 'set_volume', fields: [field] },
+      });
+      commands.set('set_volume', { feature: 'volume' });
+    }
+    return result;
+  }
+
   if (!service.config.appShortcuts) {
     body(
       label(
@@ -165,19 +204,26 @@ export function buildWidget({ gladys, service, key, settings = {} }) {
 }
 
 export function registerWidgets({ gladys, service }) {
-  for (const key of ['playback', 'favorites']) {
+  for (const key of ['playback', 'favorites', 'volume']) {
     gladys.onWidgetGet(
       key,
       ({ settings }) => buildWidget({ gladys, service, key, settings }).content,
     );
-    gladys.onWidgetAction(key, async (actionKey, _params, { settings }) => {
+    gladys.onWidgetAction(key, async (actionKey, _params, { settings, values = {} }) => {
       const { commands, device } = buildWidget({ gladys, service, key, settings });
       const command = commands.get(actionKey);
       if (!command) throw new Error('This command is no longer available. Refresh the widget.');
+      let value = command.value;
+      if (actionKey === 'set_volume') {
+        value = values.volume;
+        if (!Number.isFinite(value) || value < 0 || value > 100) {
+          throw new Error('Volume must be a number between 0 and 100.');
+        }
+      }
       await service.setValue(
         device,
         { external_id: `${device.external_id}:${command.feature}` },
-        command.value,
+        value,
       );
       // Transport commands do not always push a new state immediately.
       await service.poll(device);

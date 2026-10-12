@@ -7,7 +7,9 @@
  */
 
 /** Poll frequencies Gladys accepts, in milliseconds (DEVICE_POLL_FREQUENCIES). */
-export const POLL_FREQUENCIES = [1000, 2000, 10000, 15000, 30000, 60000];
+import { DEVICE_POLL_FREQUENCIES } from '@gladysassistant/integration-sdk';
+
+export const POLL_FREQUENCIES = Object.values(DEVICE_POLL_FREQUENCIES);
 
 export const DEFAULTS = {
   scanTimeout: 8,
