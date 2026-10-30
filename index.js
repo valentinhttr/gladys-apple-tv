@@ -30,7 +30,7 @@ gladys.onSetValue(async (device, feature, value) => {
 });
 
 gladys.onPoll(async (device) => {
-  await service.poll(device);
+  await service.poll(device, { background: true });
 });
 
 gladys.onDeviceCreated(async (device) => {

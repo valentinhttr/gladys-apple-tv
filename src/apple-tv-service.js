@@ -27,6 +27,8 @@ export class AppleTvService {
     this.lastScan = new Map();
     /** In-flight `syncDevices`, so two triggers never open the same session twice. */
     this.syncing = null;
+    /** In-flight state refreshes, shared by scheduled polls and widgets. */
+    this.polling = new Map();
   }
 
   // -- configuration -------------------------------------------------------
@@ -451,11 +453,13 @@ export class AppleTvService {
    * Answer a Gladys poll: read the device and publish what changed.
    *
    * @param {object} device The Gladys device to poll.
-   * @returns {Promise<void>} Resolves once the states are published.
+   * @param {object} [options] Options.
+   * @param {boolean} [options.background] Acknowledge scheduled polls immediately.
+   * @returns {Promise<void>} Resolves after publication, or scheduling in background mode.
    * @example
    * await service.poll(device);
    */
-  async poll(device) {
+  async poll(device, { background = false } = {}) {
     const identifier = readParam(device, PARAMS.IDENTIFIER);
     if (!identifier) {
       return;
@@ -465,16 +469,35 @@ export class AppleTvService {
     entry.host = entry.host || readParam(device, PARAMS.HOST);
 
     if (!entry.connected) {
-      // A poll is also the heartbeat that brings back an Apple TV that was
-      // switched off when Gladys started.
-      await this.connectDevice(identifier);
+      // Startup/device sync opens the session; the worker owns offline retries.
+      // Reopening it here cancels its backoff and can exceed Gladys' 5s deadline.
       return;
     }
-    try {
-      const { state } = await this.bridge.request('snapshot', { identifier }, { timeout: 20_000 });
-      await this.publishDeviceState(identifier, state || {});
-    } catch (error) {
-      this.logger.warn(`Could not read the state of ${device.name}: ${error.message}`);
+    let refresh = this.polling.get(identifier);
+    if (!refresh) {
+      refresh = (async () => {
+        try {
+          const { state } = await this.bridge.request(
+            'snapshot',
+            { identifier },
+            { timeout: 20_000 },
+          );
+          // Do not publish a snapshot after the device went offline or was removed.
+          if (entry.connected && this.devices.get(identifier) === entry) {
+            await this.publishDeviceState(identifier, state || {});
+          }
+        } catch (error) {
+          if (entry.connected) {
+            this.logger.warn(`Could not read the state of ${device.name}: ${error.message}`);
+          }
+        }
+      })().finally(() => this.polling.delete(identifier));
+      this.polling.set(identifier, refresh);
+    }
+    // The SDK acknowledges only after this handler returns. Widgets still wait
+    // for fresh state; scheduled polls publish asynchronously through publishStates.
+    if (!background) {
+      await refresh;
     }
   }
 

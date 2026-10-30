@@ -147,6 +147,7 @@ describe('connection logging', () => {
   it('logs one outage and one recovery despite repeated retries and worker events', async () => {
     const { service, bridge } = makeService();
     service.registerBridgeHandlers();
+    service.rememberHost(IDENTIFIER, '192.168.1.20').device = gladysDevice();
     let reachable = false;
     bridge.handlers.connect = ({ identifier }) => {
       bridge.emit('connection', { identifier, connected: reachable });
@@ -157,7 +158,7 @@ describe('connection logging', () => {
     };
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await service.poll(gladysDevice());
+      await service.connectDevice(IDENTIFIER);
     }
     const { lines } = service.logger;
     assert.equal(lines.info.length, 1);
@@ -167,9 +168,88 @@ describe('connection logging', () => {
     assert.equal(bridge.calls.filter(({ method }) => method === 'connect').length, 3);
 
     reachable = true;
-    await service.poll(gladysDevice());
+    await service.connectDevice(IDENTIFIER);
     assert.equal(lines.info.length, 2);
     assert.match(lines.info[1], /Living room is back online/);
+  });
+});
+
+describe('polling', () => {
+  it('leaves offline reconnection to the worker', async () => {
+    const { service, bridge } = makeService();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await service.poll(gladysDevice(), { background: true });
+    }
+    assert.equal(bridge.calls.length, 0);
+  });
+
+  it('resumes state reads when the worker reconnects without opening another session', async () => {
+    const { service, bridge, gladys } = makeService({
+      handlers: { snapshot: () => ({ state: { power: 'on' } }) },
+    });
+    service.registerBridgeHandlers();
+    await service.poll(gladysDevice());
+    bridge.emit('connection', { identifier: IDENTIFIER, connected: true });
+    await service.poll(gladysDevice());
+    assert.deepEqual(
+      bridge.calls.map(({ method }) => method),
+      ['snapshot'],
+    );
+    assert.equal(gladys.states.length, 1);
+  });
+
+  it('discards a slow snapshot when the worker reports a disconnection', async () => {
+    let finish;
+    const snapshot = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const { service, bridge, gladys } = makeService({ handlers: { snapshot: () => snapshot } });
+    service.registerBridgeHandlers();
+    service.rememberHost(IDENTIFIER, '192.168.1.20').connected = true;
+    await service.poll(gladysDevice(), { background: true });
+    const refresh = service.polling.get(IDENTIFIER);
+    bridge.emit('connection', { identifier: IDENTIFIER, connected: false });
+    finish({ state: { power: 'on' } });
+    await refresh;
+    assert.equal(gladys.states.length, 0);
+  });
+
+  it('acknowledges slow scheduled polls and shares the refresh with widgets', async () => {
+    let finish;
+    const snapshot = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const { service, bridge, gladys } = makeService({ handlers: { snapshot: () => snapshot } });
+    service.rememberHost(IDENTIFIER, '192.168.1.20').connected = true;
+    await service.poll(gladysDevice(), { background: true });
+    await service.poll(gladysDevice(), { background: true });
+    let widgetFinished = false;
+    const widget = service.poll(gladysDevice()).then(() => {
+      widgetFinished = true;
+    });
+    assert.equal(widgetFinished, false);
+    assert.equal(bridge.calls.length, 1);
+    finish({ state: { power: 'on' } });
+    await widget;
+    assert.equal(gladys.states.length, 1);
+    assert.equal(service.polling.size, 0);
+  });
+
+  it('handles background read failures and allows a later refresh', async () => {
+    const { service, bridge } = makeService({
+      handlers: {
+        snapshot: () => {
+          throw new Error('failed');
+        },
+      },
+    });
+    service.rememberHost(IDENTIFIER, '192.168.1.20').connected = true;
+    await service.poll(gladysDevice(), { background: true });
+    await service.poll(gladysDevice());
+    await service.poll(gladysDevice());
+    assert.ok(bridge.calls.length >= 2);
+    assert.equal(service.polling.size, 0);
+    assert.match(service.logger.lines.warn[0], /failed/);
   });
 });
 
