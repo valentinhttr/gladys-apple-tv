@@ -13,7 +13,7 @@
 #   - multi-arch image (linux/amd64 + linux/arm64), see the CI workflow
 # -----------------------------------------------------------------------------
 
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 
 ARG PYATV_VERSION=0.18.0
 

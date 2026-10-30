@@ -48,7 +48,7 @@ jobs:
       # previous version — a `docker_image` tag that does not exist yet — and
       # the store admission check below fails with a 404 on every release.
       # Empty on the tag and manual paths, where the default ref is correct.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
@@ -108,9 +108,9 @@ jobs:
       # on every new version by construction.
       - name: Set up Node.js
         if: steps.tags.outputs.release != ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Validate the Gladys store admission rules
         if: steps.tags.outputs.release != ''
