@@ -44,14 +44,25 @@ LOGGER = logging.getLogger("pyatv-bridge")
 
 def is_unreachable_error(error: Exception) -> bool:
     """Expected network failures while a device is unavailable."""
-    return isinstance(error, (
-        pyatv_exceptions.ConnectionFailedError,
-        pyatv_exceptions.ConnectionLostError,
-        ConnectionError,
-        asyncio.TimeoutError,
-    )) or (isinstance(error, OSError) and error.errno in {
-        errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ENETDOWN, errno.EHOSTDOWN,
-    })
+    # AirPlay wraps transport errors in ProtocolError with an explicit cause.
+    # Do not classify every ProtocolError as offline: authentication and protocol
+    # failures must remain visible. Guard malformed/cyclic exception chains too.
+    seen = set()
+    while id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, (
+            pyatv_exceptions.ConnectionFailedError,
+            pyatv_exceptions.ConnectionLostError,
+            ConnectionError,
+            asyncio.TimeoutError,
+        )) or (isinstance(error, OSError) and error.errno in {
+            errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ENETDOWN, errno.EHOSTDOWN,
+        }):
+            return True
+        if not isinstance(error, pyatv_exceptions.ProtocolError) or error.__cause__ is None:
+            return False
+        error = error.__cause__
+    return False
 
 # Directly forwarded to `atv.remote_control.<name>()`. Everything that needs an
 # argument or another interface is handled explicitly in `DeviceSession.command`.
@@ -1162,8 +1173,38 @@ def _self_test() -> None:
         f"keys actually sent: {sorted(name for _, name in calls)}"
     )
 
+    _self_test_unreachable_errors()
     _self_test_model_filter()
     _self_test_mediated_scan()
+
+
+def _self_test_unreachable_errors() -> None:
+    """Regression: AirPlay wraps network failures in ProtocolError (forum #46)."""
+    for cause in (
+        asyncio.TimeoutError(), ConnectionRefusedError(), ConnectionResetError(),
+        OSError(errno.EHOSTUNREACH, "host unreachable"),
+        pyatv_exceptions.ConnectionFailedError("offline"),
+    ):
+        wrapped = pyatv_exceptions.ProtocolError("Failed to set up remote control channel")
+        wrapped.__cause__ = cause
+        assert is_unreachable_error(cause)
+        assert is_unreachable_error(wrapped)
+        outer = pyatv_exceptions.ProtocolError("outer")
+        outer.__cause__ = wrapped
+        assert is_unreachable_error(outer)
+
+    for cause in (
+        pyatv_exceptions.InvalidCredentialsError("invalid credentials"),
+        ValueError("malformed response"),
+        OSError(errno.EACCES, "permission denied"),
+    ):
+        wrapped = pyatv_exceptions.ProtocolError("Failed to set up remote control channel")
+        wrapped.__cause__ = cause
+        assert not is_unreachable_error(wrapped)
+    wrapped = pyatv_exceptions.ProtocolError("unknown failure")
+    assert not is_unreachable_error(wrapped)
+    wrapped.__cause__ = wrapped
+    assert not is_unreachable_error(wrapped)
 
 
 def _self_test_model_filter() -> None:

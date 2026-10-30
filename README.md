@@ -217,6 +217,12 @@ pyatv internal: the image build asserts it still works, and still matters, via
 
 ### State publication
 
+Scheduled polls acknowledge immediately and refresh state in the background, with
+one in-flight refresh per device. Offline sessions reconnect in the Python
+worker; polls leave its retry backoff intact. Network errors wrapped by pyatv's
+AirPlay protocol are treated like direct connection failures, while credential
+and other protocol errors remain visible.
+
 States are deduplicated before being published: Gladys accepts 300 states per
 minute per integration, and an Apple TV pushes a playback update every second
 while seeking. Only what actually moved is sent.
