@@ -12,7 +12,7 @@
 # `docker_image` to prove it is public, so it can only pass once the image of
 # the current version has been published.
 #
-# Node 24 and Python 3.11 mirror the runtimes of the Docker image.
+# Node 26 and Python 3.11 mirror the runtimes of the Docker image.
 # -----------------------------------------------------------------------------
 name: CI
 
@@ -26,14 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     name: Lint and test
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build the image
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
 
       # amd64 only here: it proves the Dockerfile builds and that pyatv and the
